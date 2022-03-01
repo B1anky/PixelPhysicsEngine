@@ -7,8 +7,7 @@
 
 #include <QDebug>
 
-bool PhysicalElement::Update(Engine* engine){
-    //return GravityUpdate(engine);
+bool PhysicalElement::Update(Engine* /*engine*/){
     return false;
 }
 
@@ -47,31 +46,32 @@ bool PhysicalElement::SpreadUpdate(Engine* engine){
     bool canSpreadRight = engine->IsEmpty(x + 1, y);
     bool canSpreadBottomLeft  = engine->IsEmpty(x - 1, y + 1);
     bool canSpreadBottomRight = engine->IsEmpty(x + 1, y + 1);
-    bool canSpreadBottomLeftDueToDensity  = engine->TileAt(x - 1, y + 1).element->density <= density;
-    bool canSpreadBottomRightDueToDensity = engine->TileAt(x + 1, y + 1).element->density <= density;
+    bool canSpreadBottomLeftDueToDensity  = engine->TileAt(x - 1, y + 1).element->density < density;
+    bool canSpreadBottomRightDueToDensity = engine->TileAt(x + 1, y + 1).element->density < density;
 
-    if (canSpreadLeft && canSpreadRight) { // right or left randomly
-        bool left = ( rand() % 100 ) < 50;
-        spreadPoint = left ? QPoint(x - 1, y) : QPoint(x + 1, y);
-    } else if (canSpreadLeft && !canSpreadRight) { // left
-        spreadPoint = QPoint(x - 1, y);
-    } else if (!canSpreadLeft && canSpreadRight) { // right
-        spreadPoint = QPoint(x + 1, y);
-    } else if (canSpreadBottomLeft && canSpreadBottomRight) { // bottom right or bottom left randomly
+    if (canSpreadBottomLeft && canSpreadBottomRight) { // bottom right or bottom left randomly
         bool left = ( rand() % 100 ) < 50;
         spreadPoint = left ? QPoint(x - 1, y + 1) : QPoint(x + 1, y + 1);
-    } else if (canSpreadBottomLeft && !canSpreadBottomRight) { // bottom left
+    } else if (canSpreadBottomLeft) { // bottom left
         spreadPoint = QPoint(x - 1, y + 1);
-    } else if (!canSpreadBottomLeft && canSpreadBottomRight) { // bottom right
+    } else if (canSpreadBottomRight) { // bottom right
         spreadPoint = QPoint(x + 1, y + 1);
     } else if (canSpreadBottomLeftDueToDensity && canSpreadBottomRightDueToDensity) { // bottom right or left randomly (less dense)
         bool left = ( rand() % 100 ) < 50;
         spreadPoint = left ? QPoint(x - 1, y + 1) : QPoint(x + 1, y + 1);
-    } else if (canSpreadBottomLeftDueToDensity && !canSpreadBottomRightDueToDensity) { // bottom left (less dense)
+    } else if (canSpreadBottomLeftDueToDensity) { // bottom left (less dense)
         spreadPoint = QPoint(x - 1, y + 1);
-    } else if (!canSpreadBottomLeftDueToDensity && canSpreadBottomRightDueToDensity) { // bottom right (less dense)
+    } else if (canSpreadBottomRightDueToDensity) { // bottom right (less dense)
         spreadPoint = QPoint(x + 1, y + 1);
-    } else{
+    } else if (canSpreadLeft && canSpreadRight) { // right or left randomly
+        bool left = ( rand() % 100 ) < 50;
+        spreadPoint = left ? QPoint(x - 1, y) : QPoint(x + 1, y);
+    } else if (canSpreadLeft) { // left
+        spreadPoint = QPoint(x - 1, y);
+    } else if (canSpreadRight) { // right
+        spreadPoint = QPoint(x + 1, y);
+    }
+    else{
         spread = false;
     }
 
@@ -100,20 +100,20 @@ bool MoveableSolid::SpreadUpdate(Engine* engine){
     bool canSwapDownRight   = friction < 0.5 && engine->TileAt(x + 1, y + 1).element->density < density;
     QPoint spreadPoint;
 
-    if (canSpreadDownLeft && !canSpreadDownRight) {
-        spreadPoint = QPoint(x - 1, y + 1);
-    } else if (!canSpreadDownLeft && canSpreadDownRight) {
-        spreadPoint = QPoint(x + 1, y + 1);
-    } else if(canSpreadDownLeft && canSpreadDownRight) {
+    if(canSpreadDownLeft && canSpreadDownRight) {
         bool left = ( rand() % 100 ) < 50;
         spreadPoint = left ? QPoint(x - 1, y + 1) : QPoint(x + 1, y + 1);
-    } else if (canSwapDownLeft && !canSwapDownRight) {
+    } else if (canSpreadDownLeft) {
         spreadPoint = QPoint(x - 1, y + 1);
-    } else if (!canSwapDownLeft && canSwapDownRight) {
+    } else if (canSpreadDownRight) {
         spreadPoint = QPoint(x + 1, y + 1);
     } else if(canSwapDownLeft && canSwapDownRight) {
         bool left = ( rand() % 100 ) < 50;
         spreadPoint = left ? QPoint(x - 1, y + 1) : QPoint(x + 1, y + 1);
+    } else if (canSwapDownLeft) {
+        spreadPoint = QPoint(x - 1, y + 1);
+    } else if (canSwapDownRight) {
+        spreadPoint = QPoint(x + 1, y + 1);
     } else {
         spread = false;
     }
@@ -127,48 +127,32 @@ bool MoveableSolid::SpreadUpdate(Engine* engine){
 
 bool Liquid::Update(Engine* engine){
     bool dirtied = Liquid::GravityUpdate(engine);
-    //if(!dirtied){
-        dirtied = Liquid::SpreadUpdate(engine);
-    //}
+    dirtied |= Liquid::SpreadUpdate(engine);
 
     return dirtied;
-}
-
-template <typename T> int sgn(T val) {
-    return (T(0) < val) - (val < T(0));
 }
 
 bool Liquid::SpreadUpdate(Engine* engine){
     bool didSpread = PhysicalElement::SpreadUpdate(engine);
 
     if(!didSpread){
-        int xPos = parentTile->xPos;
-        int yPos = parentTile->yPos;
-        // If both of our tiles to our left or right aren't empty, don't do this expensive logic.
-        if(!engine->IsEmpty(xPos - 1, yPos) && !engine->IsEmpty(xPos + 1, yPos) ){
-            return didSpread;
-        }
-
-        //Tile* currentTile = this;
         int spread = 1;
         bool left = true;
         if (heading == 0) {
-            spread = 1;
-            left = rand() % 100 < 50;
-        }
-        QPoint updatedPosition(parentTile->xPos + spread, parentTile->yPos);
-        while(engine->InBounds(updatedPosition)){
+            left = ( rand() % 100 ) < 50;
             heading = left ? -spread : spread;
-            // Check the tile in the direction we are heading
-            QPoint spreadPoint(parentTile->xPos + heading, parentTile->yPos);
+        }
+        QPoint targetPosition(parentTile->xPos + heading, parentTile->yPos);
+        if(engine->InBounds(targetPosition)){
             // We hit a non empty tile, stop moving
-            if ( (!engine->InBounds(spreadPoint) || engine->TileAt(spreadPoint).element->density > density )) {
+            if ( (!engine->InBounds(targetPosition) || engine->TileAt(targetPosition).element->density > density )) {
                 heading = 0;
-                return didSpread;
             }
             // its empty move there
-            engine->Swap(parentTile->xPos, parentTile->yPos, spreadPoint.x(), spreadPoint.y());
-            updatedPosition = spreadPoint;
+            else{
+                engine->Swap(parentTile->xPos, parentTile->yPos, targetPosition.x(), targetPosition.y());
+                didSpread = true;
+            }
         }
     }
 
