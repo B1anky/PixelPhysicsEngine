@@ -13,7 +13,7 @@ struct Tile{
 
 public:
 
-    Tile() : xPos(-1), yPos(-1), element(nullptr){
+    Tile() : position(-1, -1), element(nullptr){
         SetElement(Mat::Material::EMPTY);
     }
 
@@ -21,15 +21,15 @@ public:
         element.reset();
     }
 
-    Tile(int xPosIn, int yPosIn, Mat::Material material) : xPos(xPosIn), yPos(yPosIn), element(nullptr){
+    Tile(int xPosIn, int yPosIn, Mat::Material material) : position(xPosIn, yPosIn), element(nullptr){
         SetElement(material);
     }
 
-    Tile(const QPoint& position, Element* elementIn) : xPos(position.x()), yPos(position.y()), element(nullptr){
+    Tile(const QPoint& positionIn, Element* elementIn) : position(positionIn), element(nullptr){
         SetElement(elementIn->material);
     }
 
-    Tile(const Tile& tile) : xPos(tile.xPos), yPos(tile.yPos), element(nullptr){
+    Tile(const Tile& tile) : position(tile.position), element(nullptr){
         SetElement(tile.element->material);
     }
 
@@ -68,17 +68,15 @@ public:
 
     Tile& operator=(const Tile& tile){
         if( this != &tile ){
-             xPos    = tile.xPos;
-             yPos    = tile.yPos;
-             element = tile.element;
+             position = tile.position;
+             element  = tile.element;
              element->parentTile = this;
         }
         return *this;
     }
 
     bool operator==(const Tile& tile) const{
-        return xPos     == tile.xPos
-            && yPos     == tile.yPos
+        return position == tile.position
             && *element == *tile.element;
     }
 
@@ -86,9 +84,7 @@ public:
         return !(*this == tile);
     }
 
-    int xPos;
-    int yPos;
-    //Element* element;
+    QPoint position;
     std::shared_ptr<PhysicalElement> element;
 };
 

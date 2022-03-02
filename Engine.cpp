@@ -1,4 +1,5 @@
 #include "Engine.h"
+#include "QGraphicsEngineItem.h"
 #include "QGraphicsPixelItem.h"
 #include "Elements.h"
 #include <QPoint>
@@ -13,7 +14,7 @@ Engine::Engine(int width, int height, QObject* parent) :
   , m_width(width)
   , m_height(height)
   , m_currentMaterial(Mat::Material::EMPTY)
-  , m_graphicsItem(nullptr)
+  , m_engineGraphicsItem(nullptr)
 {
     m_updateTimer.start(33);
     connect(&m_updateTimer, &QTimer::timeout, this, &Engine::UpdateTiles, Qt::DirectConnection);
@@ -22,34 +23,27 @@ Engine::Engine(int width, int height, QObject* parent) :
     Engine::InvalidTile.element->density = std::numeric_limits<double>::max();
 }
 
-void Engine::SetGraphicsItem(QGraphicsPixelItem* graphicsItem){
-    m_graphicsItem = graphicsItem;
-    m_graphicsItem->update();
+void Engine::SetEngineGraphicsItem(QGraphicsEngineItem* engineGraphicsItem){
+    m_engineGraphicsItem = engineGraphicsItem;
+    m_engineGraphicsItem->update();
 }
 
 // Connected to the updateTimer::timeout to control update rates.
 void Engine::UpdateTiles(){
-    bool left = ( rand() % 100 ) < 50;
-    if(left){
-        for (int i = 0; i < m_width; ++i) {
-            for (int j = m_height; j >= 0; --j) {
-                Tile& tile = TileAt(i, j);
-                if(!IsEmpty(tile)){
-                    tile.Update(this);
-                }
-            }
-        }
-    }else{
-        for (int i = m_width; i >= 0; --i) {
-            for (int j = m_height; j >= 0; --j) {
-                Tile& tile = TileAt(i, j);
-                if(!IsEmpty(tile)){
-                    tile.Update(this);
-                }
+
+    std::iota(randomWidths.begin(), randomWidths.end(), 0);
+    std::random_shuffle(randomWidths.begin(), randomWidths.end());
+
+    for (int i = 0; i < m_width; ++i) {
+        for (int j = m_height; j >= 0; --j) {
+            Tile& tile = TileAt(randomWidths[i], j);
+            if(!IsEmpty(tile)){
+                tile.Update(this);
             }
         }
     }
-    m_graphicsItem->update();
+
+    m_engineGraphicsItem->update();
 }
 
 // Returns whether the tile is a valid coordinate to check against.
@@ -59,7 +53,7 @@ bool Engine::InBounds(int xPos, int yPos){
 
 // Returns whether the tile is a valid coordinate to check against.
 bool Engine::InBounds(const Tile& tile){
-    return InBounds(tile.xPos, tile.yPos);
+    return InBounds(tile.position);
 }
 
 // Returns whether the tile is a valid coordinate to check against.
@@ -85,14 +79,14 @@ bool Engine::IsEmpty(const Tile& tile){
 // Controls setting tiles at a particular location.
 void Engine::SetTile( const Tile& tile ){
     if(InBounds(tile)){
-        m_tiles[tile.xPos][tile.yPos] = tile;
+        m_tiles[tile.position.x()][tile.position.y()] = tile;
     }
 }
 
 // Controls setting tiles at a particular location.
 void Engine::SetTile( Tile* tile ){
     if(InBounds(*tile)){
-        m_tiles[tile->xPos][tile->yPos] = *tile;
+        m_tiles[tile->position.x()][tile->position.y()] = *tile;
     }
 }
 
@@ -106,14 +100,15 @@ void Engine::ResizeTiles(int width, int height){
     m_width  = width;
     m_height = height;
     m_tiles.resize(width);
+    randomWidths.resize(width);
     for(int i = 0; i < width; ++i ){
         m_tiles[i].resize(height);
         for(int j = 0; j < height; ++j){
             SetTile(Tile(i, j, Mat::Material::EMPTY));
         }
     }
-    if(m_graphicsItem != nullptr){
-        m_graphicsItem->update();
+    if(m_engineGraphicsItem != nullptr){
+        m_engineGraphicsItem->update();
     }
 }
 
@@ -145,6 +140,6 @@ void Engine::Swap(const QPoint& pos1, const QPoint& pos2){
 }
 
 void Engine::Swap(const Tile& tile1, const Tile& tile2){
-    Swap(tile1.xPos, tile1.yPos, tile2.xPos, tile2.yPos);
+    Swap(tile1.position, tile2.position);
 }
 

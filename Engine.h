@@ -10,7 +10,7 @@
 #include <QPoint>
 #include <QSet>
 
-class QGraphicsPixelItem;
+class QGraphicsEngineItem;
 class Element;
 
 template<typename QEnum>
@@ -38,7 +38,7 @@ public:
 
     explicit Engine(int width, int height, QObject* parent = nullptr);
 
-    void SetGraphicsItem(QGraphicsPixelItem* graphicsItem);
+    void SetEngineGraphicsItem(QGraphicsEngineItem* engineGraphicsItem);
 
     // Returns whether the tile is a valid coordinate to check against.
     bool InBounds(int xPos, int yPos);
@@ -91,8 +91,9 @@ protected:
     int m_height;
     Mat::Material m_currentMaterial;
     QVector<QVector<Tile>> m_tiles;
+    QVector<int> randomWidths;
     QTimer m_updateTimer;
-    QGraphicsPixelItem* m_graphicsItem;
+    QGraphicsEngineItem* m_engineGraphicsItem;
 
 };
 

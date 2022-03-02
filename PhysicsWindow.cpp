@@ -26,7 +26,11 @@ PhysicsWindow::PhysicsWindow(QWidget* parent) :
     m_scene.installEventFilter(this);
     m_view.setAlignment(Qt::AlignTop|Qt::AlignLeft);
     m_view.setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
+    m_view.setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_view.setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_engine.SetEngineGraphicsItem(&m_engineGraphicsItem);
+
+    m_view.setSizeAdjustPolicy(QAbstractScrollArea::SizeAdjustPolicy::AdjustToContents);
 
     SetScale(5.0);
 
@@ -181,18 +185,22 @@ bool PhysicsWindow::eventFilter(QObject* target, QEvent* event)
 }
 
 void PhysicsWindow::resizeEvent(QResizeEvent* resizeEvent){
-    // Reserve or decrease space on the m_tiles.
-    int scaledWidth  = m_view.contentsRect().width()  / m_scale;
-    int scaledheight = m_view.contentsRect().height() / m_scale;
 
+    int scaledWidth  = ( m_view.contentsRect().width()  / m_scale ) + 1;
+    int scaledheight = ( m_view.contentsRect().height() / m_scale ) + 1;
+
+    m_scene.setSceneRect(0, 0, scaledWidth, scaledheight);
+
+    // These widths and heights are needed for the QGraphicsItem::boundingRect overrides.
     m_engineGraphicsItem.width  = scaledWidth;
     m_engineGraphicsItem.height = scaledheight;
 
     m_previewPixelItem.width  = scaledWidth;
     m_previewPixelItem.height = scaledheight;
 
-    m_scene.setSceneRect(0, 0, scaledWidth, scaledheight);
+    // Reserve or decrease space on the m_tiles.
     m_engine.ResizeTiles(scaledWidth, scaledheight);
+
     QWidget::resizeEvent(resizeEvent);
 }
 
@@ -226,6 +234,7 @@ void PhysicsWindow::RadiusSliderValueChanged(int value){
 
 void PhysicsWindow::SetScale(double scale){
     m_scale = scale;
-    m_view.scale(scale, scale);
-    m_engine.ResizeTiles(width()/ m_scale, height()/ m_scale);
+    m_view.scale(m_scale, m_scale);
+    m_view.fitInView(m_scene.sceneRect());
+    m_engine.ResizeTiles(width() / m_scale, height() / m_scale);
 }

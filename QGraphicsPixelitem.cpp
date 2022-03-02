@@ -1,15 +1,13 @@
 #include "QGraphicsPixelItem.h"
 #include <QPainter>
 #include <QStyleOptionGraphicsItem>
-#include <QWidget>
-#include "Engine.h"
-#include <QDebug>
 
-QGraphicsPixelItem::QGraphicsPixelItem(QVector<QVector<Tile>>& allTilesList) :
+QGraphicsPixelItem::QGraphicsPixelItem(QVector<QPoint>& pixelsIn, Mat::Material& engineMaterial) :
     QGraphicsItem()
-  , allTiles(allTilesList)
+  , pixels(pixelsIn)
   , width(100)
   , height(100)
+  , currentMaterial(engineMaterial)
 {
     setCacheMode(QGraphicsItem::NoCache);
 }
@@ -18,13 +16,12 @@ void QGraphicsPixelItem::paint(QPainter* painter, const QStyleOptionGraphicsItem
 {
     painter->save();
 
-    foreach(const QVector<Tile>& tiles, allTiles) {
-        foreach( const Tile& tile, tiles){
-            // set your pen color etc.
-            QColor color = Mat::MaterialToColorMap[tile.element->material];
-            painter->setPen(color);
-            painter->drawPoint(QPoint(tile.xPos, tile.yPos));
-        }
+    QColor alphaMaterialColor(Mat::MaterialToColorMap[currentMaterial]);
+    alphaMaterialColor.setAlpha(128);
+    painter->setPen(QPen(alphaMaterialColor));
+
+    foreach(const QPoint& point, pixels) {
+        painter->drawPoint(point);
     }
 
     painter->restore();

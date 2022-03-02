@@ -5,6 +5,7 @@
 #include <QMap>
 #include <QColor>
 #include <limits>
+#include <QPoint>
 
 #define AMBIENT_TEMP     20.0  // Celsius
 #define DEFAULT_LIFETIME 1000  // ms
@@ -39,7 +40,8 @@ struct Element
       , lifetime(DEFAULT_LIFETIME)
       , density(1.0)
       , onFire(false)
-      , heading(0)
+      , velocity(0)
+      , heading(QPoint(0,0))
       , parentTile(parentTileIn) { }
 
     virtual ~Element(){}
@@ -50,6 +52,7 @@ struct Element
       , lifetime(element.lifetime)
       , density(element.density)
       , onFire(element.onFire)
+      , velocity(element.velocity)
       , heading(element.heading){ }
 
     Element& operator=(const Element& element){
@@ -59,6 +62,7 @@ struct Element
             lifetime    = element.lifetime;
             density     = element.density;
             onFire      = element.onFire;
+            velocity    = element.velocity;
             heading     = element.heading;
         }
         return *this;
@@ -70,6 +74,7 @@ struct Element
               && lifetime    == element.lifetime
               && density     == element.density
               && onFire      == element.onFire
+              && velocity    == element.velocity
               && heading     == element.heading;
     }
 
@@ -83,7 +88,8 @@ struct Element
       , lifetime(DEFAULT_LIFETIME)
       , density(1.0)
       , onFire(false)
-      , heading(0)
+      , velocity(0)
+      , heading(QPoint(0, 0))
       , parentTile(parentTileIn) { }
 
     virtual bool Update(Engine* /*engine*/){
@@ -95,8 +101,9 @@ struct Element
     int           lifetime;
     double        density;
     bool          onFire;
-    int           heading;
-    Tile*         parentTile = nullptr;
+    int           velocity;
+    QPoint        heading; // x, y heading
+    Tile*         parentTile;
 };
 
 struct PhysicalElement : public Element{
@@ -294,20 +301,20 @@ struct Liquid : public PhysicalElement
 {
 
 public:
-    Liquid(Tile* parentTileIn) : PhysicalElement(parentTileIn), sloshCount(10){ }
+    Liquid(Tile* parentTileIn) : PhysicalElement(parentTileIn), gravityUpdated(false){ }
 
     ~Liquid(){}
 
     Liquid(const Liquid& liquid) :
         PhysicalElement(liquid)
-      , sloshCount(10)
+      , gravityUpdated(false)
     { }
 
     Liquid& operator=(const Liquid& liquid)
     {
         if(this != &liquid){
             Element::operator=(liquid);
-            sloshCount = liquid.sloshCount;
+            gravityUpdated = liquid.gravityUpdated;
         }
 
         return *this;
@@ -316,7 +323,7 @@ public:
     bool operator==(const Liquid& liquid) const
     {
         return Element::operator==(liquid)
-             && sloshCount == liquid.sloshCount;
+             && gravityUpdated == liquid.gravityUpdated;
     }
 
     bool operator!=(const Liquid& liquid) const
@@ -328,7 +335,7 @@ public:
     bool GravityUpdate(Engine* engine) override{ return PhysicalElement::GravityUpdate(engine); }
     bool SpreadUpdate(Engine* engine)  override;
 
-    int sloshCount;
+    bool gravityUpdated;
 
 };
 

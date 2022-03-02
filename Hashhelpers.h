@@ -6,7 +6,7 @@
 
 static inline uint qHash(const Tile &key, uint seed)
 {
-    return qHash(key.xPos + key.yPos, seed);
+    return qHash(key.position.x() + key.position.y(), seed);
 }
 
 #endif // HASHHELPERS_H

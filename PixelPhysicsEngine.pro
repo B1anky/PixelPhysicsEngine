@@ -12,6 +12,7 @@ SOURCES += \
     Elements.cpp \
     Engine.cpp \
     PhysicsWindow.cpp \
+    QGraphicsEngineItem.cpp \
     QGraphicsPixelItem.cpp \
     main.cpp \
     MainWindow.cpp
@@ -22,6 +23,7 @@ HEADERS += \
     Hashhelpers.h \
     MainWindow.h \
     PhysicsWindow.h \
+    QGraphicsEngineItem.h \
     Tile.h \
     QGraphicsPixelItem.h
 

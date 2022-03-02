@@ -7,6 +7,43 @@
 
 #include <QDebug>
 
+template <typename T> int sign(T val) {
+    return (T(0) < val) - (val < T(0));
+}
+
+QPoint HeadingFromPointChange(const QPoint& initialPoint, const QPoint& endPoint)
+{
+    QPoint heading(0, 0);
+
+    if(initialPoint.x() < endPoint.x()){ // -> moved right
+        heading.setX(1);
+    }else if(initialPoint.x() > endPoint.x()){ // -> moved left
+        heading.setX(-1);
+    }
+
+    if(initialPoint.y() < endPoint.y()){ // -> moved down
+        heading.setY(1);
+    }else if(initialPoint.y() > endPoint.y()){ // -> moved up
+        heading.setY(-1);
+    }
+
+    return heading;
+}
+
+// Try to determine the y component of the velocity minus gravity.
+// If falling with gravity, increment proportionally, else decrement to slow vertical ascent.
+void DeltaVelocityDueToGravity(int& velocity, const QPoint& initialPoint, const QPoint& endPoint){
+    // break up the component dx and dy components where velocity is the magnitude
+
+    velocity = sign(initialPoint.y() - endPoint.y()); // - sign implies falling, 0 sign implies not falling, + sign implies rising
+
+}
+
+// True is left, false is right
+bool HorizontalDirectionFromHeading(const QPoint& heading){
+    return heading.x() != 0 ? sign(heading.x()) < 0 : ( rand() % 100 ) < 50;
+}
+
 bool PhysicalElement::Update(Engine* /*engine*/){
     return false;
 }
@@ -21,7 +58,7 @@ bool PhysicalElement::GravityUpdate(Engine* engine){
         yDirection = density > AMBIENT_DENSITY ? 1 : -1;
     }
 
-    QPoint gravitatedPoint(parentTile->xPos, parentTile->yPos + yDirection);
+    QPoint gravitatedPoint(parentTile->position.x(), parentTile->position.y() + yDirection);
     if(!engine->InBounds(gravitatedPoint)) return abidedToGravity;
 
     bool canSwap = engine->IsEmpty(gravitatedPoint)
@@ -29,7 +66,12 @@ bool PhysicalElement::GravityUpdate(Engine* engine){
                 || ( ( engine->TileAt(gravitatedPoint).element->density > density ) && ( yDirection < 0 ) ); // We want to move up and we're less dense
 
     if(canSwap){
-        engine->Swap(parentTile->xPos, parentTile->yPos, gravitatedPoint.x(), gravitatedPoint.y());
+
+        heading = HeadingFromPointChange(parentTile->position, gravitatedPoint);
+
+        //DeltaVelocityDueToGravity(velocity, parentTile->position, gravitatedPoint);
+
+        engine->Swap(parentTile->position, gravitatedPoint);
         abidedToGravity = true;
     }
     return abidedToGravity;
@@ -38,33 +80,33 @@ bool PhysicalElement::GravityUpdate(Engine* engine){
 bool PhysicalElement::SpreadUpdate(Engine* engine){
 
     bool spread = true;
-    int x = parentTile->xPos;
-    int y = parentTile->yPos;
+    int x = parentTile->position.x();
+    int y = parentTile->position.y();
     QPoint spreadPoint;
 
-    bool canSpreadLeft  = engine->IsEmpty(x - 1, y);
-    bool canSpreadRight = engine->IsEmpty(x + 1, y);
-    bool canSpreadBottomLeft  = engine->IsEmpty(x - 1, y + 1);
-    bool canSpreadBottomRight = engine->IsEmpty(x + 1, y + 1);
-    bool canSpreadBottomLeftDueToDensity  = engine->TileAt(x - 1, y + 1).element->density < density;
-    bool canSpreadBottomRightDueToDensity = engine->TileAt(x + 1, y + 1).element->density < density;
+    bool canSpreadLeft                    = engine->IsEmpty(x - 1, y);
+    bool canSpreadRight                   = engine->IsEmpty(x + 1, y);
+    bool canSpreadBottomLeft              = engine->IsEmpty(x - 1, y + 1) && canSpreadLeft;
+    bool canSpreadBottomRight             = engine->IsEmpty(x + 1, y + 1) && canSpreadRight;
+    bool canSpreadBottomLeftDueToDensity  = engine->TileAt(x - 1, y + 1).element->density < density && canSpreadLeft;
+    bool canSpreadBottomRightDueToDensity = engine->TileAt(x + 1, y + 1).element->density < density && canSpreadRight;
 
-    if (canSpreadBottomLeft && canSpreadBottomRight) { // bottom right or bottom left randomly
-        bool left = ( rand() % 100 ) < 50;
+    if (canSpreadBottomLeft && canSpreadBottomRight) { // bottom right or bottom left based on heading
+        bool left = HorizontalDirectionFromHeading(heading);
         spreadPoint = left ? QPoint(x - 1, y + 1) : QPoint(x + 1, y + 1);
     } else if (canSpreadBottomLeft) { // bottom left
         spreadPoint = QPoint(x - 1, y + 1);
     } else if (canSpreadBottomRight) { // bottom right
         spreadPoint = QPoint(x + 1, y + 1);
-    } else if (canSpreadBottomLeftDueToDensity && canSpreadBottomRightDueToDensity) { // bottom right or left randomly (less dense)
-        bool left = ( rand() % 100 ) < 50;
+    } else if (canSpreadBottomLeftDueToDensity && canSpreadBottomRightDueToDensity) { // bottom right or left based on heading (against delta density)
+        bool left = HorizontalDirectionFromHeading(heading);
         spreadPoint = left ? QPoint(x - 1, y + 1) : QPoint(x + 1, y + 1);
     } else if (canSpreadBottomLeftDueToDensity) { // bottom left (less dense)
         spreadPoint = QPoint(x - 1, y + 1);
     } else if (canSpreadBottomRightDueToDensity) { // bottom right (less dense)
         spreadPoint = QPoint(x + 1, y + 1);
-    } else if (canSpreadLeft && canSpreadRight) { // right or left randomly
-        bool left = ( rand() % 100 ) < 50;
+    } else if (canSpreadLeft && canSpreadRight) { // right or left based on heading
+        bool left = HorizontalDirectionFromHeading(heading);
         spreadPoint = left ? QPoint(x - 1, y) : QPoint(x + 1, y);
     } else if (canSpreadLeft) { // left
         spreadPoint = QPoint(x - 1, y);
@@ -76,7 +118,9 @@ bool PhysicalElement::SpreadUpdate(Engine* engine){
     }
 
     if(spread){
-        engine->Swap(x, y, spreadPoint.x(), spreadPoint.y());
+        heading = HeadingFromPointChange(parentTile->position, spreadPoint);
+        DeltaVelocityDueToGravity(velocity, parentTile->position, spreadPoint);
+        engine->Swap(parentTile->position, spreadPoint);
     }
 
     return spread;
@@ -91,35 +135,39 @@ bool MoveableSolid::Update(Engine* engine){
 
 bool MoveableSolid::SpreadUpdate(Engine* engine){
     bool spread = true;
-    int x = parentTile->xPos;
-    int y = parentTile->yPos;
+    int x = parentTile->position.x();
+    int y = parentTile->position.y();
 
-    bool canSpreadDownLeft  = friction < 0.5 && engine->IsEmpty(x - 1, y + 1);
-    bool canSpreadDownRight = friction < 0.5 && engine->IsEmpty(x + 1, y + 1);
-    bool canSwapDownLeft    = friction < 0.5 && engine->TileAt(x - 1, y + 1).element->density < density;
-    bool canSwapDownRight   = friction < 0.5 && engine->TileAt(x + 1, y + 1).element->density < density;
+    bool canSpreadLeft                    = friction < 0.5 && engine->IsEmpty(x - 1, y);
+    bool canSpreadRight                   = friction < 0.5 && engine->IsEmpty(x + 1, y);
+    bool canSpreadDownLeft                = friction < 0.5 && engine->IsEmpty(x - 1, y + 1) && canSpreadLeft;
+    bool canSpreadDownRight               = friction < 0.5 && engine->IsEmpty(x + 1, y + 1) && canSpreadRight;
+    bool canSpreadBottomLeftDueToDensity  = friction < 0.5 && engine->TileAt(x - 1, y + 1).element->density < density && canSpreadLeft;
+    bool canSpreadBottomRightDueToDensity = friction < 0.5 && engine->TileAt(x + 1, y + 1).element->density < density && canSpreadRight;
     QPoint spreadPoint;
 
     if(canSpreadDownLeft && canSpreadDownRight) {
-        bool left = ( rand() % 100 ) < 50;
+        bool left = HorizontalDirectionFromHeading(heading);
         spreadPoint = left ? QPoint(x - 1, y + 1) : QPoint(x + 1, y + 1);
     } else if (canSpreadDownLeft) {
         spreadPoint = QPoint(x - 1, y + 1);
     } else if (canSpreadDownRight) {
         spreadPoint = QPoint(x + 1, y + 1);
-    } else if(canSwapDownLeft && canSwapDownRight) {
-        bool left = ( rand() % 100 ) < 50;
+    } else if(canSpreadBottomLeftDueToDensity && canSpreadBottomRightDueToDensity) {
+        bool left = HorizontalDirectionFromHeading(heading);
         spreadPoint = left ? QPoint(x - 1, y + 1) : QPoint(x + 1, y + 1);
-    } else if (canSwapDownLeft) {
+    } else if (canSpreadBottomLeftDueToDensity) {
         spreadPoint = QPoint(x - 1, y + 1);
-    } else if (canSwapDownRight) {
+    } else if (canSpreadBottomRightDueToDensity) {
         spreadPoint = QPoint(x + 1, y + 1);
     } else {
         spread = false;
     }
 
     if(spread){
-        engine->Swap(x, y, spreadPoint.x(), spreadPoint.y());
+        heading = HeadingFromPointChange(parentTile->position, spreadPoint);
+        DeltaVelocityDueToGravity(velocity, parentTile->position, spreadPoint);
+        engine->Swap(parentTile->position, spreadPoint);
     }
 
     return spread;
@@ -127,6 +175,7 @@ bool MoveableSolid::SpreadUpdate(Engine* engine){
 
 bool Liquid::Update(Engine* engine){
     bool dirtied = Liquid::GravityUpdate(engine);
+    gravityUpdated = dirtied;
     dirtied |= Liquid::SpreadUpdate(engine);
 
     return dirtied;
@@ -135,25 +184,49 @@ bool Liquid::Update(Engine* engine){
 bool Liquid::SpreadUpdate(Engine* engine){
     bool didSpread = PhysicalElement::SpreadUpdate(engine);
 
-    if(!didSpread){
-        int spread = 1;
-        bool left = true;
-        if (heading == 0) {
-            left = ( rand() % 100 ) < 50;
-            heading = left ? -spread : spread;
-        }
-        QPoint targetPosition(parentTile->xPos + heading, parentTile->yPos);
-        if(engine->InBounds(targetPosition)){
-            // We hit a non empty tile, stop moving
-            if ( (!engine->InBounds(targetPosition) || engine->TileAt(targetPosition).element->density > density )) {
-                heading = 0;
+    if(!gravityUpdated && !didSpread && heading.x() == 0){
+        int spread = engine->m_width;
+        bool left = HorizontalDirectionFromHeading(heading);
+        // Should compound the liquid's heading in its already moving direction
+        heading.setX(left ? spread : -spread );
+    }
+
+
+    QPoint spreadPoint(parentTile->position.x(), parentTile->position.y());
+    if(sign(heading.x()) < 0) {
+        spreadPoint.setX(std::max(parentTile->position.x() + heading.x(), 0));
+    }else if(sign(heading.x()) > 0){
+        spreadPoint.setX(std::min(parentTile->position.x() + heading.x(), engine->m_width));
+    }
+
+    // We hit a non empty tile, stop moving
+    // We have to loop over every point in betweem current location and target to see if something will stop us early.
+    int finalSpreadOffset(0);
+    int spreadDirection = sign(heading.x());
+    for(; finalSpreadOffset < abs(heading.x()); ++finalSpreadOffset){
+        QPoint potentialPoint(parentTile->position.x() + (spreadDirection * finalSpreadOffset), parentTile->position.y());
+        if ( (!engine->InBounds(potentialPoint) || engine->TileAt(potentialPoint).element->density > density ) ){
+            if(finalSpreadOffset > 0){
+                --finalSpreadOffset;
             }
-            // its empty move there
-            else{
-                engine->Swap(parentTile->xPos, parentTile->yPos, targetPosition.x(), targetPosition.y());
-                didSpread = true;
-            }
+            spreadPoint = QPoint(parentTile->position.x() + (spreadDirection * finalSpreadOffset), parentTile->position.y());
+            heading.setX(0);
+            break;
+        }else if(engine->IsEmpty(potentialPoint)){
+            spreadPoint = potentialPoint;
+            heading.setX(0);
+            break;
         }
+    }
+
+    if(engine->IsEmpty(spreadPoint)){
+
+
+        // Note: Compounding heading for liquids so they keep their direction for longer.
+        //heading += HeadingFromPointChange(parentTile->position, spreadPoint);
+        //DeltaVelocityDueToGravity(velocity, parentTile->position, spreadPoint);
+        engine->Swap(parentTile->position, spreadPoint);
+        didSpread = true;
     }
 
     return didSpread;

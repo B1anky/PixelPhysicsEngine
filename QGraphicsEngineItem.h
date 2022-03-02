@@ -1,22 +1,21 @@
-#ifndef QGRAPHICSPIXELITEM_H
-#define QGRAPHICSPIXELITEM_H
+#ifndef QGRAPHICSENGINEITEM_H
+#define QGRAPHICSENGINEITEM_H
 
 #include <QObject>
 #include <QGraphicsItem>
 #include <QVector>
 #include <QRectF>
-#include "Elements.h"
 
 class QPainter;
 class QStyleOptionGraphicsItem;
 class QWidget;
 class Tile;
 
-class QGraphicsPixelItem : public QGraphicsItem{
+class QGraphicsEngineItem : public QGraphicsItem{
 
 public:
 
-    explicit QGraphicsPixelItem(QVector<QPoint>& pixelsIn, Mat::Material& engineMaterial);
+    explicit QGraphicsEngineItem(QVector<QVector<Tile>>& allTilesList );
 
     QRectF boundingRect() const override{
         return QRectF(0, 0, width, height);
@@ -26,10 +25,10 @@ public:
 
 public:
 
-    QVector<QPoint>& pixels;
+    QVector<QVector<Tile>>& allTiles;
     int width;
     int height;
-    Mat::Material& currentMaterial;
 };
 
-#endif // QGRAPHICSPIXELITEM_H
+
+#endif // QGRAPHICSENGINEITEM_H
