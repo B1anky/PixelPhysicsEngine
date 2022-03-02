@@ -25,7 +25,7 @@ PhysicsWindow::PhysicsWindow(QWidget* parent) :
     m_view.setScene(&m_scene);
     m_scene.installEventFilter(this);
     m_view.setAlignment(Qt::AlignTop|Qt::AlignLeft);
-    m_view.setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
+    m_view.setViewportUpdateMode(QGraphicsView::SmartViewportUpdate);
     m_view.setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_view.setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_engine.SetEngineGraphicsItem(&m_engineGraphicsItem);

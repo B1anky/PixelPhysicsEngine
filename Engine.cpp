@@ -16,7 +16,7 @@ Engine::Engine(int width, int height, QObject* parent) :
   , m_currentMaterial(Mat::Material::EMPTY)
   , m_engineGraphicsItem(nullptr)
 {
-    m_updateTimer.start(33);
+    m_updateTimer.start(60);
     connect(&m_updateTimer, &QTimer::timeout, this, &Engine::UpdateTiles, Qt::DirectConnection);
     ResizeTiles(width, height);
     srand(time(NULL));

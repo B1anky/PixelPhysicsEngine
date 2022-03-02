@@ -184,50 +184,61 @@ bool Liquid::Update(Engine* engine){
 bool Liquid::SpreadUpdate(Engine* engine){
     bool didSpread = PhysicalElement::SpreadUpdate(engine);
 
-    if(!gravityUpdated && !didSpread && heading.x() == 0){
-        int spread = engine->m_width;
-        bool left = HorizontalDirectionFromHeading(heading);
-        // Should compound the liquid's heading in its already moving direction
-        heading.setX(left ? spread : -spread );
-    }
+    if(!gravityUpdated && !didSpread){
 
+        if(heading.x() == 0){
+            int spread = engine->m_width;
+            bool left = HorizontalDirectionFromHeading(heading);
+            // Should compound the liquid's heading in its already moving direction
+            heading.setX(left ? spread : -spread );
+        }
 
-    QPoint spreadPoint(parentTile->position.x(), parentTile->position.y());
-    if(sign(heading.x()) < 0) {
-        spreadPoint.setX(std::max(parentTile->position.x() + heading.x(), 0));
-    }else if(sign(heading.x()) > 0){
-        spreadPoint.setX(std::min(parentTile->position.x() + heading.x(), engine->m_width));
-    }
+        QPoint spreadPoint(parentTile->position.x(), parentTile->position.y());
 
-    // We hit a non empty tile, stop moving
-    // We have to loop over every point in betweem current location and target to see if something will stop us early.
-    int finalSpreadOffset(0);
-    int spreadDirection = sign(heading.x());
-    for(; finalSpreadOffset < abs(heading.x()); ++finalSpreadOffset){
-        QPoint potentialPoint(parentTile->position.x() + (spreadDirection * finalSpreadOffset), parentTile->position.y());
-        if ( (!engine->InBounds(potentialPoint) || engine->TileAt(potentialPoint).element->density > density ) ){
-            if(finalSpreadOffset > 0){
-                --finalSpreadOffset;
+        // Efficiency check. Don't look for next spot if you're completely surrounded.
+        // Note: This is a temporary fix and does have some visual side effects.
+        //       TODO below emphasizes the expensive logic we're tyring to skip at all costs.
+        //       Fluids are expensive to simulate...
+        bool isSurrounded = true;
+        for(int i = -1; i <= 1; ++i){
+            for(int j = -1; j <= 1; ++j){
+                QPoint offsetPoint(i,j);
+                if(engine->IsEmpty(parentTile->position + offsetPoint)){
+                    isSurrounded = false;
+                    break;
+                }
             }
-            spreadPoint = QPoint(parentTile->position.x() + (spreadDirection * finalSpreadOffset), parentTile->position.y());
+        }
+
+        if(isSurrounded){
             heading.setX(0);
-            break;
-        }else if(engine->IsEmpty(potentialPoint)){
-            spreadPoint = potentialPoint;
-            heading.setX(0);
-            break;
+            return didSpread;
+        }
+
+        // We hit a non empty tile, stop moving
+        // We have to loop over every point in betweem current location and target to see if something will stop us early.
+        // TODO: Do this logic in its own thread since it's very expensive.
+        int spreadDirection = sign(heading.x());
+        QPoint potentialPoint(0, 0);
+        for(int finalSpreadOffset = 0; finalSpreadOffset < abs(heading.x()); ++finalSpreadOffset){
+            potentialPoint.setX(parentTile->position.x() + (spreadDirection * finalSpreadOffset));
+            potentialPoint.setY(parentTile->position.y());
+            if ( (!engine->InBounds(potentialPoint) || engine->TileAt(potentialPoint).element->density > density ) ){
+                spreadPoint.setX(parentTile->position.x() + (spreadDirection * finalSpreadOffset));
+                spreadPoint.setY(parentTile->position.y());
+                heading.setX(0);
+                break;
+            }else if(engine->IsEmpty(potentialPoint)){
+                spreadPoint = potentialPoint;
+                heading.setX(0);
+                break;
+            }
+        }
+
+        if(engine->IsEmpty(spreadPoint)){
+            engine->Swap(parentTile->position, spreadPoint);
+            didSpread = true;
         }
     }
-
-    if(engine->IsEmpty(spreadPoint)){
-
-
-        // Note: Compounding heading for liquids so they keep their direction for longer.
-        //heading += HeadingFromPointChange(parentTile->position, spreadPoint);
-        //DeltaVelocityDueToGravity(velocity, parentTile->position, spreadPoint);
-        engine->Swap(parentTile->position, spreadPoint);
-        didSpread = true;
-    }
-
     return didSpread;
 }
