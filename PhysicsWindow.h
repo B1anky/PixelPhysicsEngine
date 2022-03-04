@@ -11,6 +11,7 @@
 #include <QGraphicsView>
 #include <QSlider>
 #include <QLabel>
+#include <QPushButton>
 
 class QEvent;
 class QResizeEvent;
@@ -26,6 +27,8 @@ protected:
 
     bool eventFilter(QObject* target, QEvent* event);
 
+    void resize();
+
     void resizeEvent(QResizeEvent* resizeEvent) override;
 
     void keyPressEvent(QKeyEvent* keyEvent) override;
@@ -34,7 +37,7 @@ protected:
 
     void MaterialComboBoxValueChanged(const QString& newMaterialString);
 
-    void RadiusSliderValueChanged(int value);
+    void SetPenRadius(int value);
 
     void SetScale(double scale);
 
@@ -42,6 +45,10 @@ protected:
     void CircleAt( std::function<void(int,int)> f );
 
     void LineAt();
+
+    void PreviewPixelsAt();
+
+    void ClearTiles();
 
 protected:
 
@@ -55,6 +62,10 @@ protected:
     QComboBox      m_materialComboBox;
     QSlider        m_radiusSlider;
     QLabel         m_radiusValueLabel;
+    QSlider        m_scaleSlider;
+    QLabel         m_scaleValueLabel;
+    QPushButton    m_clearButton;
+
 
     // Drawing
     QGraphicsEngineItem m_engineGraphicsItem;
@@ -69,6 +80,7 @@ protected:
     bool    m_leftMousePressed;
     bool    m_rightMousePressed;
     bool    m_shiftKeyPressed;
+    bool    m_controlKeyPressed;
     QPointF m_lastMousePosition;
     int     m_radius;
     double  m_scale;

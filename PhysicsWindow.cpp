@@ -8,15 +8,22 @@
 #include <QPainterPathStroker>
 #include <QDebug>
 
+template <typename T> int sign(T val) {
+    return (T(0) < val) - (val < T(0));
+}
+
 PhysicsWindow::PhysicsWindow(QWidget* parent) :
     QWidget(parent)
   , m_engine(500, 500, this)
   , m_radiusSlider(Qt::Orientation::Horizontal)
+  , m_scaleSlider(Qt::Orientation::Horizontal)
+  , m_clearButton("Clear View")
   , m_engineGraphicsItem(m_engine.m_tiles)
   , m_previewPixelItem(m_previewPixels, m_engine.m_currentMaterial)
   , m_leftMousePressed(false)
   , m_rightMousePressed(false)
   , m_shiftKeyPressed(false)
+  , m_controlKeyPressed(false)
   , m_radius(1)
   , m_scale(1.0)
 {
@@ -28,11 +35,12 @@ PhysicsWindow::PhysicsWindow(QWidget* parent) :
     m_view.setViewportUpdateMode(QGraphicsView::SmartViewportUpdate);
     m_view.setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_view.setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+    SetScale(5.0);
+
     m_engine.SetEngineGraphicsItem(&m_engineGraphicsItem);
 
     m_view.setSizeAdjustPolicy(QAbstractScrollArea::SizeAdjustPolicy::AdjustToContents);
-
-    SetScale(5.0);
 
     QStringList materialList;
     QMetaEnum materialMetaEnum = QMetaEnum::fromType<Mat::Material>();
@@ -41,20 +49,33 @@ PhysicsWindow::PhysicsWindow(QWidget* parent) :
     }
     m_materialComboBox.addItems(materialList);
     m_mainVLayout.addWidget(&m_materialComboBox);
-    QWidget* sliderWidget = new QWidget;
-    QHBoxLayout* sliderHLayout = new QHBoxLayout;
-    sliderWidget->setLayout(sliderHLayout);
-    m_mainVLayout.addWidget(sliderWidget);
-    sliderHLayout->addWidget(&m_radiusValueLabel);
-    sliderHLayout->addWidget(&m_radiusSlider);
-    m_mainVLayout.addWidget(sliderWidget);
+    QWidget* radiuSliderWidget = new QWidget;
+    QHBoxLayout* radiusSliderHLayout = new QHBoxLayout;
+    radiuSliderWidget->setLayout(radiusSliderHLayout);
+    radiusSliderHLayout->addWidget(&m_radiusValueLabel);
+    radiusSliderHLayout->addWidget(&m_radiusSlider);
+    m_mainVLayout.addWidget(radiuSliderWidget);
     m_radiusSlider.setRange(1, 20);
 
+    QWidget* scaleSliderWidget = new QWidget;
+    QHBoxLayout* scaleSliderHLayout = new QHBoxLayout;
+    scaleSliderWidget->setLayout(scaleSliderHLayout);
+    scaleSliderHLayout->addWidget(&m_scaleValueLabel);
+    scaleSliderHLayout->addWidget(&m_scaleSlider);
+    m_mainVLayout.addWidget(scaleSliderWidget);
+    m_scaleSlider.setRange(5, 20);
+
+    m_mainVLayout.addWidget(&m_clearButton);
+
     connect(&m_materialComboBox, &QComboBox::currentTextChanged, this, &PhysicsWindow::MaterialComboBoxValueChanged, Qt::DirectConnection);
-    connect(&m_radiusSlider,     &QSlider::valueChanged,         this, &PhysicsWindow::RadiusSliderValueChanged,     Qt::DirectConnection);
+    connect(&m_radiusSlider,     &QSlider::valueChanged,         this, &PhysicsWindow::SetPenRadius,                 Qt::DirectConnection);
+    connect(&m_scaleSlider,      &QSlider::valueChanged,         this, &PhysicsWindow::SetScale,                     Qt::DirectConnection);
+    connect(&m_clearButton,      &QPushButton::clicked,          this, &PhysicsWindow::ClearTiles,                   Qt::DirectConnection);
 
     m_radiusSlider.setValue(m_radius);
-    RadiusSliderValueChanged(m_radius);
+    SetPenRadius(m_radius);
+
+    m_scaleSlider.setValue(m_scale);
 
     QColor alphaMaterialColor(Mat::MaterialToColorMap[m_engine.m_currentMaterial]);
     alphaMaterialColor.setAlpha(128);
@@ -100,27 +121,29 @@ void PhysicsWindow::LineAt(){
         for(int y = boundingRect.top(); y < boundingRect.bottom(); ++y){
             QPointF point(x, y);
             if(strokedPath.contains(point)){
-                m_engine.SetTile(Tile(point.x(), point.y(), m_engine.m_currentMaterial));
+                m_engine.SetTile(Tile(point.x(), point.y(), m_engine.m_currentMaterial), m_engine.m_tiles);
             }
         }
     }
 }
 
+void PhysicsWindow::PreviewPixelsAt(){
+    m_previewPixels.clear();
+    CircleAt( [this](int i, int j){ m_previewPixels.append(QPoint(i, j)); } );
+    m_previewPixelItem.update();
+}
+
 bool PhysicsWindow::eventFilter(QObject* target, QEvent* event)
 {
     auto PlaceAt = [this](int i, int j){
-        m_engine.SetTile(Tile(i, j, m_engine.m_currentMaterial));
+        m_engine.SetTile(Tile(i, j, m_engine.m_currentMaterial), m_engine.m_workerThread.dirtyTiles_);
     };
 
     auto PlaceCircle = [this, PlaceAt](){
         CircleAt(PlaceAt);
     };
 
-    auto PreviewPixelsAt = [this](){
-        m_previewPixels.clear();
-        CircleAt( [this](int i, int j){ m_previewPixels.append(QPoint(i, j)); } );
-        m_previewPixelItem.update();
-    };
+
 
     if (target == &m_scene){
 
@@ -169,6 +192,13 @@ bool PhysicsWindow::eventFilter(QObject* target, QEvent* event)
             const QGraphicsSceneMouseEvent* const mouseEvent = static_cast<const QGraphicsSceneMouseEvent*>(event);
             m_leftMousePressed  = ( mouseEvent->buttons() & Qt::LeftButton );
             m_rightMousePressed = ( mouseEvent->buttons() & Qt::RightButton );
+        }else if(event->type() == QEvent::GraphicsSceneWheel){
+            const QGraphicsSceneWheelEvent* const wheelEvent = static_cast<const QGraphicsSceneWheelEvent*>(event);
+            if( m_controlKeyPressed ){
+                SetScale( m_scale + sign( wheelEvent->delta() ) );
+            }else{
+                SetPenRadius( m_radius + sign( wheelEvent->delta() ) );
+            }
         }
     }
 
@@ -184,8 +214,7 @@ bool PhysicsWindow::eventFilter(QObject* target, QEvent* event)
     return QWidget::eventFilter(target, event);
 }
 
-void PhysicsWindow::resizeEvent(QResizeEvent* resizeEvent){
-
+void PhysicsWindow::resize(){
     int scaledWidth  = ( m_view.contentsRect().width()  / m_scale ) + 1;
     int scaledheight = ( m_view.contentsRect().height() / m_scale ) + 1;
 
@@ -200,7 +229,10 @@ void PhysicsWindow::resizeEvent(QResizeEvent* resizeEvent){
 
     // Reserve or decrease space on the m_tiles.
     m_engine.ResizeTiles(scaledWidth, scaledheight);
+}
 
+void PhysicsWindow::resizeEvent(QResizeEvent* resizeEvent){
+    resize();
     QWidget::resizeEvent(resizeEvent);
 }
 
@@ -209,11 +241,26 @@ void PhysicsWindow::keyPressEvent(QKeyEvent* keyEvent){
         m_shiftKeyPressed = true;
         LineAt();
     }
+
+    if( keyEvent->modifiers() & Qt::ControlModifier ){
+        m_controlKeyPressed = true;
+    }
+
+    Qt::Key key = static_cast<Qt::Key>(keyEvent->key());
+
+    if(Mat::KeyToMaterialMap.contains(key)){
+        QMetaEnum materialMetaEnum = QMetaEnum::fromType<Mat::Material>();
+        m_materialComboBox.setCurrentText( materialMetaEnum.valueToKey(Mat::KeyToMaterialMap[key]) );
+    }
 }
 
 void PhysicsWindow::keyReleaseEvent(QKeyEvent* keyEvent){
     if( (keyEvent->modifiers() & Qt::ShiftModifier ) == 0){
         m_shiftKeyPressed = false;
+    }
+
+    if( (keyEvent->modifiers() & Qt::ControlModifier) == 0){
+        m_controlKeyPressed = false;
     }
 }
 
@@ -226,15 +273,38 @@ void PhysicsWindow::MaterialComboBoxValueChanged(const QString& newMaterialStrin
     m_lineOverlayItem.setPen(QPen(alphaMaterialColor, m_radius));
 }
 
-void PhysicsWindow::RadiusSliderValueChanged(int value){
+void PhysicsWindow::SetPenRadius(int value){
+    if(value < m_radiusSlider.minimum() || m_radiusSlider.maximum() < value ) return;
+    if(sender() != &m_radiusSlider){
+        m_radiusSlider.setValue(value);
+    }
+
     m_radius = value;
     m_radiusValueLabel.setText(QString("Radius: %0").arg(QString::number(m_radius)));
     m_lineOverlayItem.setPen(QPen(m_lineOverlayItem.pen().color(), m_radius));
+    PreviewPixelsAt();
 }
 
 void PhysicsWindow::SetScale(double scale){
+    if(scale < m_scaleSlider.minimum() || m_scaleSlider.maximum() < scale ) return;
     m_scale = scale;
+    m_scaleValueLabel.setText(QString("Scale: %0").arg(QString::number(m_scale)));
+    if(sender() != &m_scaleSlider)
+        m_scaleSlider.setValue(m_scale);
+
+
+    int originalWidth  = width();
+    int originalheight = height();
+
+    resize();
+
     m_view.scale(m_scale, m_scale);
+    m_view.translate(originalWidth - width(), originalheight - height());
+
     m_view.fitInView(m_scene.sceneRect());
-    m_engine.ResizeTiles(width() / m_scale, height() / m_scale);
+
+}
+
+void PhysicsWindow::ClearTiles(){
+    m_engine.ClearTiles(m_engine.m_workerThread.dirtyTiles_);
 }

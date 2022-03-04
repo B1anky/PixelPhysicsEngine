@@ -62,8 +62,8 @@ public:
         }
     }
 
-    void Update(Engine* engine){
-        element->Update(engine);
+    void Update(Engine* engine, QVector<QVector<Tile>>& tilesToUpdateAgainst){
+        element->Update(engine, tilesToUpdateAgainst);
     }
 
     Tile& operator=(const Tile& tile){

@@ -5,6 +5,7 @@
 #include <QGraphicsItem>
 #include <QVector>
 #include <QRectF>
+#include <QImage>
 
 class QPainter;
 class QStyleOptionGraphicsItem;
@@ -26,6 +27,7 @@ public:
 public:
 
     QVector<QVector<Tile>>& allTiles;
+    QImage tileImage;
     int width;
     int height;
 };

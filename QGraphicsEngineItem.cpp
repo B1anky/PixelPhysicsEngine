@@ -4,6 +4,7 @@
 #include <QWidget>
 #include "Engine.h"
 #include <QDebug>
+#include <QPoint>
 
 QGraphicsEngineItem::QGraphicsEngineItem(QVector<QVector<Tile>>& allTilesList) :
     QGraphicsItem()
@@ -18,6 +19,7 @@ void QGraphicsEngineItem::paint(QPainter* painter, const QStyleOptionGraphicsIte
 {
     painter->save();
 
+    //m_tile_mutex.lockForRead();
     foreach(const QVector<Tile>& tiles, allTiles) {
         foreach( const Tile& tile, tiles){
             // set your pen color etc.
@@ -26,6 +28,7 @@ void QGraphicsEngineItem::paint(QPainter* painter, const QStyleOptionGraphicsIte
             painter->drawPoint(tile.position);
         }
     }
+    //m_tile_mutex.unlock();
 
     painter->restore();
 }
