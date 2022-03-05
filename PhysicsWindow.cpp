@@ -18,7 +18,7 @@ PhysicsWindow::PhysicsWindow(QWidget* parent) :
   , m_radiusSlider(Qt::Orientation::Horizontal)
   , m_scaleSlider(Qt::Orientation::Horizontal)
   , m_clearButton("Clear View")
-  , m_engineGraphicsItem(m_engine.m_tiles)
+  , m_engineGraphicsItem(m_engine.m_mainThreadTileSet)
   , m_previewPixelItem(m_previewPixels, m_engine.m_currentMaterial)
   , m_leftMousePressed(false)
   , m_rightMousePressed(false)
@@ -121,7 +121,7 @@ void PhysicsWindow::LineAt(){
         for(int y = boundingRect.top(); y < boundingRect.bottom(); ++y){
             QPointF point(x, y);
             if(strokedPath.contains(point)){
-                m_engine.SetTile(Tile(point.x(), point.y(), m_engine.m_currentMaterial), m_engine.m_tiles);
+                m_engine.m_mainThreadTileSet.SetTile(Tile(point.x(), point.y(), m_engine.m_currentMaterial));
             }
         }
     }
@@ -136,14 +136,13 @@ void PhysicsWindow::PreviewPixelsAt(){
 bool PhysicsWindow::eventFilter(QObject* target, QEvent* event)
 {
     auto PlaceAt = [this](int i, int j){
-        m_engine.SetTile(Tile(i, j, m_engine.m_currentMaterial), m_engine.m_workerThread.dirtyTiles_);
+        m_engine.UserPlacedTile(Tile(i, j, m_engine.m_currentMaterial));
+        //m_engine.m_workerThread.m_tileSet.SetTile();
     };
 
     auto PlaceCircle = [this, PlaceAt](){
         CircleAt(PlaceAt);
     };
-
-
 
     if (target == &m_scene){
 
@@ -220,10 +219,6 @@ void PhysicsWindow::resize(){
 
     m_scene.setSceneRect(0, 0, scaledWidth, scaledheight);
 
-    // These widths and heights are needed for the QGraphicsItem::boundingRect overrides.
-    m_engineGraphicsItem.width  = scaledWidth;
-    m_engineGraphicsItem.height = scaledheight;
-
     m_previewPixelItem.width  = scaledWidth;
     m_previewPixelItem.height = scaledheight;
 
@@ -287,11 +282,13 @@ void PhysicsWindow::SetPenRadius(int value){
 
 void PhysicsWindow::SetScale(double scale){
     if(scale < m_scaleSlider.minimum() || m_scaleSlider.maximum() < scale ) return;
+
     m_scale = scale;
     m_scaleValueLabel.setText(QString("Scale: %0").arg(QString::number(m_scale)));
-    if(sender() != &m_scaleSlider)
-        m_scaleSlider.setValue(m_scale);
 
+    if(sender() != &m_scaleSlider){
+        m_scaleSlider.setValue(m_scale);
+    }
 
     int originalWidth  = width();
     int originalheight = height();
@@ -306,5 +303,5 @@ void PhysicsWindow::SetScale(double scale){
 }
 
 void PhysicsWindow::ClearTiles(){
-    m_engine.ClearTiles(m_engine.m_workerThread.dirtyTiles_);
+    m_engine.ClearTiles();
 }

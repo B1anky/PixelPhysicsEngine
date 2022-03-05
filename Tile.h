@@ -7,11 +7,11 @@
 #include <memory>
 #include "Elements.h"
 
-class Engine;
+class TileSet;
 
 struct Tile{
 
-public:
+public:    
 
     Tile() : position(-1, -1), element(nullptr){
         SetElement(Mat::Material::EMPTY);
@@ -62,8 +62,8 @@ public:
         }
     }
 
-    void Update(Engine* engine, QVector<QVector<Tile>>& tilesToUpdateAgainst){
-        element->Update(engine, tilesToUpdateAgainst);
+    void Update(TileSet& tilesToUpdateAgainst){
+        element->Update(tilesToUpdateAgainst);
     }
 
     Tile& operator=(const Tile& tile){
@@ -87,5 +87,7 @@ public:
     QPoint position;
     std::shared_ptr<PhysicalElement> element;
 };
+
+static inline Tile InvalidTile;
 
 #endif // TILE_H

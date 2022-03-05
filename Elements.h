@@ -12,7 +12,7 @@
 #define AMBIENT_DENSITY  1.225 // kg/m^3
 
 class Tile;
-class Engine;
+class TileSet;
 
 namespace Mat{
     Q_NAMESPACE
@@ -98,7 +98,7 @@ struct Element
       , heading(QPoint(0, 0))
       , parentTile(parentTileIn) { }
 
-    virtual bool Update(Engine* /*engine*/){
+    virtual bool Update(){
         return false;
     }
 
@@ -138,9 +138,9 @@ struct PhysicalElement : public Element{
         return !(*this == physicalElement);
     }
 
-    virtual bool Update(Engine* engine, QVector<QVector<Tile> >& tilesToUpdateAgainst);
-    virtual bool GravityUpdate(Engine* engine, QVector<QVector<Tile> >& tilesToUpdateAgainst);
-    virtual bool SpreadUpdate(Engine* engine, QVector<QVector<Tile>>& tilesToUpdateAgainst);
+    virtual bool Update(TileSet& tilesToUpdateAgainst);
+    virtual bool GravityUpdate(TileSet& tilesToUpdateAgainst);
+    virtual bool SpreadUpdate(TileSet& tilesToUpdateAgainst);
 
 };
 
@@ -245,9 +245,9 @@ struct MoveableSolid : public Solid{
         return !(*this == moveableSolid);
     }
 
-    bool Update(Engine* engine, QVector<QVector<Tile>>& tilesToUpdateAgainst)        override;
-    bool GravityUpdate(Engine *engine, QVector<QVector<Tile>>& tilesToUpdateAgainst) override{ return PhysicalElement::GravityUpdate(engine, tilesToUpdateAgainst); }
-    bool SpreadUpdate(Engine* engine, QVector<QVector<Tile>>& tilesToUpdateAgainst)  override;
+    bool Update(TileSet& tilesToUpdateAgainst)        override;
+    bool GravityUpdate(TileSet& tilesToUpdateAgainst) override{ return PhysicalElement::GravityUpdate(tilesToUpdateAgainst); }
+    bool SpreadUpdate(TileSet& tilesToUpdateAgainst)  override;
 
 };
 
@@ -281,16 +281,16 @@ public:
         return !(*this == sand);
     }
 
-    bool Update(Engine *engine, QVector<QVector<Tile>>& tilesToUpdateAgainst) override{
-        return MoveableSolid::Update(engine, tilesToUpdateAgainst);
+    bool Update(TileSet& tilesToUpdateAgainst) override{
+        return MoveableSolid::Update(tilesToUpdateAgainst);
     }
 
-    bool GravityUpdate(Engine* engine, QVector<QVector<Tile>>& tilesToUpdateAgainst) override{
-        return MoveableSolid::Update(engine, tilesToUpdateAgainst);
+    bool GravityUpdate(TileSet& tilesToUpdateAgainst) override{
+        return MoveableSolid::Update(tilesToUpdateAgainst);
     }
 
-    bool SpreadUpdate(Engine* engine, QVector<QVector<Tile>>& tilesToUpdateAgainst) override{
-        return MoveableSolid::SpreadUpdate(engine, tilesToUpdateAgainst);
+    bool SpreadUpdate(TileSet& tilesToUpdateAgainst) override{
+        return MoveableSolid::SpreadUpdate(tilesToUpdateAgainst);
     }
 
 };
@@ -337,9 +337,9 @@ public:
         return !(*this == liquid);
     }
 
-    bool Update(Engine* engine, QVector<QVector<Tile>>& tilesToUpdateAgainst)        override;
-    bool GravityUpdate(Engine* engine, QVector<QVector<Tile>>& tilesToUpdateAgainst) override{ return PhysicalElement::GravityUpdate(engine, tilesToUpdateAgainst); }
-    bool SpreadUpdate(Engine* engine, QVector<QVector<Tile>>& tilesToUpdateAgainst)  override;
+    bool Update(TileSet& tilesToUpdateAgainst)        override;
+    bool GravityUpdate(TileSet& tilesToUpdateAgainst) override{ return PhysicalElement::GravityUpdate(tilesToUpdateAgainst); }
+    bool SpreadUpdate(TileSet& tilesToUpdateAgainst)  override;
 
     bool gravityUpdated;
 
@@ -376,9 +376,9 @@ public:
         return !(*this == water);
     }
 
-    bool Update(Engine* engine, QVector<QVector<Tile>>& tilesToUpdateAgainst)        override{ return Liquid::Update(engine, tilesToUpdateAgainst);        }
-    bool GravityUpdate(Engine* engine, QVector<QVector<Tile>>& tilesToUpdateAgainst) override{ return Liquid::GravityUpdate(engine, tilesToUpdateAgainst); }
-    bool SpreadUpdate(Engine* engine, QVector<QVector<Tile>>& tilesToUpdateAgainst)  override{ return Liquid::SpreadUpdate(engine, tilesToUpdateAgainst);  }
+    bool Update(TileSet& tilesToUpdateAgainst)        override{ return Liquid::Update(tilesToUpdateAgainst);        }
+    bool GravityUpdate(TileSet& tilesToUpdateAgainst) override{ return Liquid::GravityUpdate(tilesToUpdateAgainst); }
+    bool SpreadUpdate(TileSet& tilesToUpdateAgainst)  override{ return Liquid::SpreadUpdate(tilesToUpdateAgainst);  }
 
 };
 

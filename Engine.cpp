@@ -2,31 +2,48 @@
 #include "QGraphicsEngineItem.h"
 #include "QGraphicsPixelItem.h"
 #include "Elements.h"
-#include <QPoint>
 #include "Hashhelpers.h"
+#include "TileSet.h"
+
+#include <QPoint>
 #include <random>
 #include <time.h>
 
-Tile Engine::InvalidTile;
-
 void Worker::UpdateTiles(){
+
+    if(needToResize){
+        m_tileSet.ResizeTiles(m_resizeRequest.width(), m_resizeRequest.height());
+        xOffset_ = assignedWorkerColumn_ * m_resizeRequest.width();
+        yOffset_ = assignedWorkerRow_    * m_resizeRequest.height();
+        needToResize = false;
+    }
+
     m_tile_mutex.lockForWrite();
-    QVector<int> localWidths = randomWidths_;
+    QVector<int> localWidths(QVector<int>(m_tileSet.width()));
     std::iota(localWidths.begin(), localWidths.end(), 0);
     std::random_shuffle(localWidths.begin(), localWidths.end());
 
-    for (int i = 0; i < dirtyTiles_.size(); ++i) {
-        int col = std::min(localWidths.at(i), dirtyTiles_.size() - 1);
-        for (int j = dirtyTiles_.at(col).size() - 1; j >= 0; --j) {
-            Tile& tile = dirtyTiles_[col][j];
+    for (int i = 0; i < m_tileSet.width(); ++i) {
+        for (int j = m_tileSet.height() - 1; j >= 0; --j) {
+            Tile& tile = m_tileSet.TileAt(i, j);
             if(!IsEmpty(tile)){
-                tile.Update(engine_, dirtyTiles_);
+                tile.Update(m_tileSet);
             }
         }
     }
-
-    allTiles_ = dirtyTiles_;
     m_tile_mutex.unlock();
+
+    m_tile_mutex.lockForRead();
+
+    // Based on current width and heights, determine where
+    // we index into the mainThreadTiles.
+    for (int i = 0; i < m_tileSet.width(); ++i) {
+        for (int j = m_tileSet.height() - 1; j >= 0; --j) {
+            mainThreadTiles.SetTile(Tile(i + xOffset_, j + yOffset_, m_tileSet.TileAt(i, j).element->material));
+        }
+    }
+    m_tile_mutex.unlock();
+
 }
 
 Engine::Engine(int width, int height, QObject* parent) :
@@ -35,19 +52,25 @@ Engine::Engine(int width, int height, QObject* parent) :
   , m_height(height)
   , m_currentMaterial(Mat::Material::EMPTY)
   , m_engineGraphicsItem(nullptr)
-  , m_workerThread(m_tiles, randomWidths, this)
-{    
-    UpdateLoop();
+{
+    ::InvalidTile.element->density = std::numeric_limits<double>::max();
+
     ResizeTiles(width, height, true);
     srand(time(NULL));
-    Engine::InvalidTile.element->density = std::numeric_limits<double>::max();
-    ClearTiles(m_tiles);
-    m_initialized = false;
-}
-
-void Engine::UpdateLoop(){
+    ClearTiles();
+    m_workersInitialized = false;
     m_updateTimer.start(33);
     connect(&m_updateTimer, &QTimer::timeout, this, &Engine::UpdateTiles, Qt::DirectConnection);
+}
+
+void Engine::SetupWorkerThreads(int totalRows, int totalColumns){
+    for(int i = 0; i < totalRows; ++i){
+        for(int j = 0; j < totalColumns; ++j){
+            m_workerThreads[QPoint(i, j)] = new Worker(m_mainThreadTileSet, totalRows, totalColumns, i, j, this);
+        }
+    }
+    totalWorkerRows = totalRows;
+    totalWorkerColumns = totalColumns;
 }
 
 Engine::~Engine(){
@@ -57,12 +80,17 @@ Engine::~Engine(){
 void Engine::SetEngineGraphicsItem(QGraphicsEngineItem* engineGraphicsItem){
     m_engineGraphicsItem = engineGraphicsItem;
     m_engineGraphicsItem->update();
-    m_initialized = true;
-    m_workerThread.dirtyTiles_ = m_tiles;
-    QThread* thread = new QThread(this);
-    m_workerThread.setup(thread, "1");
-    m_workerThread.moveToThread(thread);
-    thread->start();
+
+    SetupWorkerThreads(2, 2);
+
+    foreach(auto workerThread, m_workerThreads){
+        QThread* thread = new QThread(this);
+        workerThread->setup(thread, QString("Row: %0, Column: %1").arg(workerThread->assignedWorkerRow_).arg(workerThread->assignedWorkerColumn_));
+        workerThread->moveToThread(thread);
+        thread->start();
+    }
+
+    m_workersInitialized = true;
 }
 
 // Connected to the updateTimer::timeout to control update rates.
@@ -70,156 +98,77 @@ void Engine::UpdateTiles(){
     m_engineGraphicsItem->update();
 }
 
-// Returns whether the tile is a valid coordinate to check against.
-bool Engine::InBounds(int xPos, int yPos, QVector<QVector<Tile> >& tileToCheckAgainst){
-    return xPos >= 0 && xPos < tileToCheckAgainst.size() && yPos >= 0 && yPos < tileToCheckAgainst.at(0).size();
-}
-
-// Returns whether the tile is a valid coordinate to check against.
-bool Engine::InBounds(const Tile& tile, QVector<QVector<Tile> >& tileToCheckAgainst){
-    return InBounds(tile.position, tileToCheckAgainst);
-}
-
-// Returns whether the tile is a valid coordinate to check against.
-bool Engine::InBounds(const QPoint& position, QVector<QVector<Tile> >& tileToCheckAgainst){
-    return InBounds(position.x(), position.y(), tileToCheckAgainst);
-}
-
-// Returns whether the tile at location x, y's material is empty
-bool Engine::IsEmpty(int xPos, int yPos, QVector<QVector<Tile>>& tileToCheckAgainst){
-    bool empty = false;
-    if(InBounds(xPos, yPos, tileToCheckAgainst)){
-        //m_tile_mutex.lockForRead();
-        empty = tileToCheckAgainst.at(xPos).at(yPos).element->material == Mat::Material::EMPTY;
-        //m_tile_mutex.unlock();
+void Engine::ClearTiles(){
+    foreach(auto workerThread, m_workerThreads){
+        workerThread->m_tileSet.ClearTiles();
     }
-    return empty;
+
+    m_mainThreadTileSet.ClearTiles();
 }
 
-// Returns whether the tile at location x, y's material is empty
-bool Engine::IsEmpty(const QPoint& position, QVector<QVector<Tile> >& tileToCheckAgainst){
-    return IsEmpty(position.x(), position.y(), tileToCheckAgainst);
-}
-
-// Returns whether the tile at location x, y's material is empty
-bool Engine::IsEmpty(const Tile& tile){
-    return tile.element->material == Mat::Material::EMPTY;
-}
-
-// Controls setting tiles at a particular location.
-void Engine::SetTile( const Tile& tile, QVector<QVector<Tile> >& tileToCheckAgainst){
-    m_tile_mutex.lockForWrite();
-    if(InBounds(tile, tileToCheckAgainst)){
-        tileToCheckAgainst[tile.position.x()][tile.position.y()] = tile;
-    }
-    m_tile_mutex.unlock();
-}
-
-// Controls setting tiles at a particular location.
-void Engine::SetTile( Tile* tile, QVector<QVector<Tile> >& tileToCheckAgainst){
-    if(InBounds(*tile, tileToCheckAgainst)){
-        //m_tile_mutex.lockForWrite();
-        tileToCheckAgainst[tile->position.x()][tile->position.y()] = *tile;
-        //m_tile_mutex.unlock();
-    }
-}
-
-// Sets the material that will be inserted on the next mouse-left-click event.
 void Engine::SetMaterial(Mat::Material material){
     m_currentMaterial = material;
 }
 
+// To encapsulate the threading location of each sub rect, figure out which
+// tile's row and column corresponds wot which worker thread's.
+void Engine::UserPlacedTile(Tile tile){
+    int x = tile.position.x();
+    int y = tile.position.y();
+
+    int workerWidths  = m_width  / totalWorkerColumns;
+    int workerHeights = m_height / totalWorkerRows;
+
+    int workerRow = 0;
+    while(workerRow < totalWorkerRows){
+        if(y <= workerRow * workerHeights){
+            break;
+        }
+        ++workerRow;
+    }
+
+    int workerColumn = 0;
+    while(workerColumn < totalWorkerColumns){
+        if(x <= workerColumn * workerWidths){
+            break;
+        }
+        ++workerColumn;
+    }
+
+    --workerRow;
+    --workerColumn;
+
+    QPoint workerKey(workerRow, workerColumn);
+    // We have to normalize the tile being placed into this worker.
+
+    //xOffset_ = assignedWorkerColumn_ / totalWorkerColumns_  * m_resizeRequest.width();
+    //yOffset_ = assignedWorkerRow_    / totalWorkerRows_     * m_resizeRequest.height();
+
+    Worker* worker = m_workerThreads[workerKey];
+
+    tile.position.setX(x - worker->xOffset_);
+    tile.position.setY(y - worker->yOffset_);
+    worker->m_tileSet.SetTile(tile);
+
+}
+
 // PhysicsWindow will invoke this on a resize event to make the m_tiles match the size of the window.
 void Engine::ResizeTiles(int width, int height, bool initialization){
+    if(width == m_width && height == m_height && !initialization) return;
 
-    int originalWidth  = 0;
-    int originalHeight = 0;
-    {
-        m_tile_mutex.lockForRead();
-        originalWidth  = m_width;
-        originalHeight = m_height;
-        m_tile_mutex.unlock();
-    }
+    m_width  = width;
+    m_height = height;
 
-    if( ( width != originalWidth || height != originalHeight ) || initialization){
-
-        // Determine how much width and height we may have gained to properly set those tiles.
-        {
-            m_tile_mutex.lockForWrite();
-
-            m_width  = width;
-            m_height = height;
-
-            m_tiles.resize(width);
-            for(int i = 0; i < width; ++i){
-                m_tiles[i].resize(height);
-            }
-
-            m_tile_mutex.unlock();
-        }
-
-        for(int i = originalWidth; i < width; ++i){
-            for(int j = 0; j < height; ++j){
-                SetTile(Tile(i, j, Mat::Material::EMPTY), m_tiles);
-            }
-        }
-
-        for(int i = 0; i < width; ++i){
-            for(int j = originalHeight; j < height; ++j){
-                SetTile(Tile(i, j, Mat::Material::EMPTY), m_tiles);
-            }
-        }
-
-        m_tile_mutex.lockForWrite();
-
-        m_workerThread.dirtyTiles_ = m_tiles;
-        randomWidths.resize(width);
-        m_tile_mutex.unlock();
-
-        if(m_engineGraphicsItem != nullptr){
-            m_engineGraphicsItem->update();
+    if(m_workersInitialized){
+        foreach(auto workerThread, m_workerThreads){
+            workerThread->heightWidthMutex_.lockForWrite();
+            workerThread->m_resizeRequest.setWidth(m_width / totalWorkerColumns);
+            workerThread->m_resizeRequest.setHeight(m_height / totalWorkerRows);
+            workerThread->needToResize = true;
+            workerThread->heightWidthMutex_.unlock();
         }
     }
-}
 
-// Convenience for getting a tile at a position.
-Tile& Engine::TileAt(int xPos, int yPos, QVector<QVector<Tile> >& tileToCheckAgainst){
-    if( !InBounds(xPos, yPos, tileToCheckAgainst) )
-        return InvalidTile;
-    return tileToCheckAgainst[xPos][yPos];
-}
+    m_mainThreadTileSet.ResizeTiles(width, height, initialization);
 
-// Convenience for getting a tile at a position.
-Tile& Engine::TileAt(const QPoint& position, QVector<QVector<Tile> >& tileToCheckAgainst){
-    return TileAt(position.x(), position.y(), tileToCheckAgainst);
-}
-
-void Engine::Swap(int xPos1, int yPos1, int xPos2, int yPos2, QVector<QVector<Tile> >& tileToCheckAgainst){
-    if (!InBounds(xPos1, yPos1, tileToCheckAgainst)) return;
-    if (!InBounds(xPos2, yPos2, tileToCheckAgainst)) return;
-
-    //m_tile_mutex.lockForRead();
-    Tile& originalTile    = TileAt(xPos1, yPos1, tileToCheckAgainst);
-    Tile& destinationTile = TileAt(xPos2, yPos2, tileToCheckAgainst);
-    //m_tile_mutex.unlock();
-
-    //m_tile_mutex.lockForWrite();
-    originalTile.SwapElements(destinationTile);
-    //m_tile_mutex.unlock();
-}
-
-void Engine::Swap(const QPoint& pos1, const QPoint& pos2, QVector<QVector<Tile> >& tileToCheckAgainst){
-    Swap(pos1.x(), pos1.y(), pos2.x(), pos2.y(), tileToCheckAgainst);
-}
-
-void Engine::Swap(const Tile& tile1, const Tile& tile2, QVector<QVector<Tile> >& tileToCheckAgainst){
-    Swap(tile1.position, tile2.position, tileToCheckAgainst);
-}
-
-void Engine::ClearTiles( QVector<QVector<Tile> >& tileToCheckAgainst ){
-    for(int i = 0; i < m_width; ++i ){
-        for(int j = 0; j < m_height; ++j){
-            SetTile(Tile(i, j, Mat::Material::EMPTY), tileToCheckAgainst);
-        }
-    }
 }

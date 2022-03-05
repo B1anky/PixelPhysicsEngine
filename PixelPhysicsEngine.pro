@@ -14,6 +14,7 @@ SOURCES += \
     PhysicsWindow.cpp \
     QGraphicsEngineItem.cpp \
     QGraphicsPixelItem.cpp \
+    TileSet.cpp \
     main.cpp \
     MainWindow.cpp
 
@@ -25,7 +26,8 @@ HEADERS += \
     PhysicsWindow.h \
     QGraphicsEngineItem.h \
     Tile.h \
-    QGraphicsPixelItem.h
+    QGraphicsPixelItem.h \
+    TileSet.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

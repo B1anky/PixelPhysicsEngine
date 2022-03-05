@@ -11,25 +11,23 @@ class QPainter;
 class QStyleOptionGraphicsItem;
 class QWidget;
 class Tile;
+class TileSet;
 
 class QGraphicsEngineItem : public QGraphicsItem{
 
 public:
 
-    explicit QGraphicsEngineItem(QVector<QVector<Tile>>& allTilesList );
+    explicit QGraphicsEngineItem(TileSet& tileSetToPaint);
 
-    QRectF boundingRect() const override{
-        return QRectF(0, 0, width, height);
-    }
+    QRectF boundingRect() const override;
+
+    void SetTileSet(TileSet& tileSetToPaint);
 
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget = nullptr) override;
 
 public:
 
-    QVector<QVector<Tile>>& allTiles;
-    QImage tileImage;
-    int width;
-    int height;
+    TileSet& paintTiles;
 };
 
 

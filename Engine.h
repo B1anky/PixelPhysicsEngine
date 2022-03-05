@@ -2,6 +2,7 @@
 #define ENGINE_H
 
 #include "Tile.h"
+#include "TileSet.h"
 #include <QObject>
 #include <QTimer>
 #include <QVector>
@@ -15,9 +16,11 @@
 #include <QThread>
 #include <QMutex>
 #include <QReadWriteLock>
+#include <QSize>
 
 class QGraphicsEngineItem;
 class Element;
+class Engine;
 
 template<typename QEnum>
 QString QtEnumToQString (const QEnum value)
@@ -36,13 +39,17 @@ class Worker : public QObject{
 
 public:
 
-    Worker(QVector<QVector<Tile>>& allTiles, QVector<int>& randomWidths, Engine* engine, QObject* parent = nullptr)
+    Worker(TileSet& allTiles, int totalWorkerRows, int totalWorkerColumns, int workerRow, int workerColumn, QObject* parent = nullptr)
         : QObject(parent)
-        , allTiles_(allTiles)
-        , randomWidths_(randomWidths)
-        , engine_(engine)
-        , dirtyTiles_(allTiles)
+        , mainThreadTiles(allTiles)
+        , totalWorkerRows_(totalWorkerRows)
+        , totalWorkerColumns_(totalWorkerColumns)
+        , assignedWorkerRow_(workerRow)
+        , assignedWorkerColumn_(workerColumn)
+        , m_tileSet(allTiles)
     {
+        xOffset_ = assignedWorkerColumn_ * m_resizeRequest.width();
+        yOffset_ = assignedWorkerRow_    * m_resizeRequest.height();
     }
 
     ~Worker(){
@@ -56,6 +63,7 @@ public:
     void UpdateTiles();
 
     virtual void work(){
+        srand(time(NULL));
         QTimer* updateTimer = new QTimer(this);
         updateTimer->start(33);
         connect(updateTimer, &QTimer::timeout, this, &Worker::UpdateTiles, Qt::DirectConnection);
@@ -78,16 +86,23 @@ signals:
 
 public:
 
-    QVector<QVector<Tile>>&  allTiles_;
-    QVector<int>&            randomWidths_;
-    Engine*                  engine_;
+    TileSet&  mainThreadTiles;
+    std::atomic<bool> needToResize;
+    QReadWriteLock heightWidthMutex_;
 
 protected:
-    QVector<QVector<Tile>>   dirtyTiles_;
+    // Used to determine the width and height implicitly
+    int totalWorkerRows_;
+    int totalWorkerColumns_;
+    int assignedWorkerRow_;
+    int assignedWorkerColumn_;
+    int xOffset_;
+    int yOffset_;
+
+    TileSet                  m_tileSet;
     QString                  m_id;
-    //QTimer                   m_updateTimer;
     static inline QMutex     m_mutex = QMutex();
-    //static inline QSemaphore m_lockAcquirer = QSemaphore(0);
+    QSize m_resizeRequest;
 };
 
 class Engine : public QObject
@@ -103,52 +118,20 @@ class Engine : public QObject
 
 public:
 
-    static Tile InvalidTile;
-
     explicit Engine(int width, int height, QObject* parent = nullptr);
 
     ~Engine();
 
+    void SetupWorkerThreads(int totalRows, int totalColumns);
+
     void SetEngineGraphicsItem(QGraphicsEngineItem* engineGraphicsItem);
 
-    // Returns whether the tile is a valid coordinate to check against.
-    bool InBounds(int xPos, int yPos, QVector<QVector<Tile> >& tileToCheckAgainst);
+    // Clears all main and worker thread tiles to have an empty material at each tile.
+    void ClearTiles();
 
-    // Returns whether the tile is a valid coordinate to check against.
-    bool InBounds(const QPoint& position, QVector<QVector<Tile> >& tileToCheckAgainst);
-
-    // Returns whether the tile is a valid coordinate to check against.
-    bool InBounds(const Tile& tile, QVector<QVector<Tile> >& tileToCheckAgainst);
-
-    // Returns whether the tile at location x, y's material is empty.
-    bool IsEmpty(int xPos, int yPos, QVector<QVector<Tile> >& tileToCheckAgainst);
-
-    // Returns whether the tile at location x, y's material is empty.
-    bool IsEmpty(const QPoint& position, QVector<QVector<Tile> >& tileToCheckAgainst);
-
-    // Returns whether the tile at location x, y's material is empty.
-    bool IsEmpty(const Tile& tile);
-
-    // Controls setting tiles at a particular location. This will add it to the dirty set.
-    void SetTile( const Tile& tile, QVector<QVector<Tile> >& tileToCheckAgainst);
-
-    // Controls setting tiles at a particular location. This will add it to the dirty set.
-    void SetTile( Tile* tile, QVector<QVector<Tile> >& tileToCheckAgainst);
-
-    // Sets the material that will be inserted on the next mouse-left-click event.
     void SetMaterial(Mat::Material material);
 
-    // Convenience for getting a tile at a position.
-    Tile& TileAt(int xPos, int yPos, QVector<QVector<Tile> >& tileToCheckAgainst);
-
-    // Convenience for getting a tile at a position.
-    Tile& TileAt(const QPoint& position, QVector<QVector<Tile> >& tileToCheckAgainst);
-
-    void Swap(int xPos1, int yPos1, int xPos2, int yPos2, QVector<QVector<Tile> >& tileToCheckAgainst);
-    void Swap(const QPoint& pos1, const QPoint& pos2, QVector<QVector<Tile> >& tileToCheckAgainst);
-    void Swap(const Tile& tile1, const Tile& tile2, QVector<QVector<Tile> >& tileToCheckAgainst);
-
-    void ClearTiles(QVector<QVector<Tile> >& tileToCheckAgainst);
+    void UserPlacedTile(Tile tile);
 
 protected:
 
@@ -158,21 +141,22 @@ protected:
     // PhysicsWindow will invoke this on a resize event to make the m_tiles match the size of the window.
     void ResizeTiles(int width, int height, bool initialization = false);
 
-    void UpdateLoop();
-
 protected:
 
     int m_width;
     int m_height;
+
+    // Used to determine the width and height implicitly
+    int totalWorkerRows;
+    int totalWorkerColumns;
+
     Mat::Material m_currentMaterial;
-    QVector<QVector<Tile>> m_tiles;
-    QVector<int> randomWidths;
-    QTimer m_updateTimer;
+    TileSet m_mainThreadTileSet;
+    QTimer  m_updateTimer;
     QGraphicsEngineItem* m_engineGraphicsItem;
-    std::unique_lock<std::mutex> m_tile_shared_lock;
-    //std::mutex m_tile_mutex;
-    Worker m_workerThread;
-    std::atomic<bool> m_initialized;
+
+    QMap<QPoint, Worker*> m_workerThreads;
+    std::atomic<bool> m_workersInitialized;
 };
 
 #endif // ENGINE_H
