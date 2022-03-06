@@ -18,7 +18,7 @@ PhysicsWindow::PhysicsWindow(QWidget* parent) :
   , m_radiusSlider(Qt::Orientation::Horizontal)
   , m_scaleSlider(Qt::Orientation::Horizontal)
   , m_clearButton("Clear View")
-  , m_engineGraphicsItem(m_engine.m_mainThreadTileSet)
+  , m_engineGraphicsItem(m_engine.m_mainThreadTileSet, m_engine.m_workerImage)
   , m_previewPixelItem(m_previewPixels, m_engine.m_currentMaterial)
   , m_leftMousePressed(false)
   , m_rightMousePressed(false)
@@ -121,7 +121,7 @@ void PhysicsWindow::LineAt(){
         for(int y = boundingRect.top(); y < boundingRect.bottom(); ++y){
             QPointF point(x, y);
             if(strokedPath.contains(point)){
-                m_engine.m_mainThreadTileSet.SetTile(Tile(point.x(), point.y(), m_engine.m_currentMaterial));
+                m_engine.UserPlacedTile(Tile(point.x(), point.y(), m_engine.m_currentMaterial));
             }
         }
     }

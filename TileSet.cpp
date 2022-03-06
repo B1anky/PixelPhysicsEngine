@@ -42,7 +42,7 @@ void TileSet::Update(){
     std::iota(randomOrderIter.begin(), randomOrderIter.end(), 0);
     std::random_shuffle(randomOrderIter.begin(), randomOrderIter.end());
 
-    m_readWriteLock.lockForWrite();
+    //m_readWriteLock.lockForWrite();
 
     for (int i = 0; i < m_tileSet.size(); ++i) {
         int col = std::min(randomOrderIter.at(i), m_tileSet.size() - 1);
@@ -54,7 +54,7 @@ void TileSet::Update(){
         }
     }
 
-    m_readWriteLock.unlock();
+    //m_readWriteLock.unlock();
 
 }
 
@@ -96,19 +96,19 @@ bool TileSet::IsEmpty(const Tile& tile){
 
 // Controls setting tiles at a particular location.
 void TileSet::SetTile(const Tile& tile){
-    m_readWriteLock.lockForWrite();
+    //m_readWriteLock.lockForWrite();
     if(InBounds(tile)){
         m_tileSet[tile.position.x()][tile.position.y()] = tile;
     }
-    m_readWriteLock.unlock();
+    //m_readWriteLock.unlock();
 }
 
 // Controls setting tiles at a particular location.
 void TileSet::SetTile(Tile* tile){
     if(InBounds(*tile)){
-        m_readWriteLock.lockForWrite();
+        //m_readWriteLock.lockForWrite();
         m_tileSet[tile->position.x()][tile->position.y()] = *tile;
-        m_readWriteLock.unlock();
+        //m_readWriteLock.unlock();
     }
 }
 

@@ -6,15 +6,16 @@
 #include <QDebug>
 #include <QPoint>
 
-QGraphicsEngineItem::QGraphicsEngineItem(TileSet& tileSetToPaint) :
+QGraphicsEngineItem::QGraphicsEngineItem(TileSet& tileSetToPaint, QImage& imageToPaint) :
     QGraphicsItem()
   , paintTiles(tileSetToPaint)
+  , paintImage(imageToPaint)
 {
     setCacheMode(QGraphicsItem::NoCache);
 }
 
 QRectF QGraphicsEngineItem::boundingRect() const{
-    return QRectF(0, 0, paintTiles.width(), paintTiles.height());
+    return QRectF(0, 0, paintImage.width(), paintImage.height());
 }
 
 void QGraphicsEngineItem::SetTileSet(TileSet& tileSetToPaint){
@@ -25,23 +26,7 @@ void QGraphicsEngineItem::paint(QPainter* painter, const QStyleOptionGraphicsIte
 {
     painter->save();
 
-    //if(paintTiles.m_readWriteLock.tryLockForRead()){
-    //    prevFrameTiles = paintTiles;
-    //    paintTiles.m_readWriteLock.unlock();
-    //}
-
-    paintTiles.m_readWriteLock.lockForRead();
-
-    foreach(const QVector<Tile>& tiles, paintTiles.m_tileSet) {
-        foreach(const Tile& tile, tiles){
-            // set your pen color etc.
-            QColor color = Mat::MaterialToColorMap[tile.element->material];
-            painter->setPen(color);
-            painter->drawPoint(tile.position);
-        }
-    }
-
-    paintTiles.m_readWriteLock.unlock();
+    painter->drawImage(0, 0, paintImage);
 
     painter->restore();
 }

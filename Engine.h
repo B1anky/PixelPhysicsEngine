@@ -17,6 +17,7 @@
 #include <QMutex>
 #include <QReadWriteLock>
 #include <QSize>
+#include <QImage>
 
 class QGraphicsEngineItem;
 class Element;
@@ -38,14 +39,17 @@ class Worker : public QObject{
 
 public:
 
-    Worker(TileSet& allTiles, int totalWorkerRows, int totalWorkerColumns, int workerRow, int workerColumn, QObject* parent = nullptr)
+    Worker(TileSet& allTiles, int totalWorkerRows, int totalWorkerColumns, int workerRow, int workerColumn, QImage& workerImage, QObject* parent = nullptr)
         : QObject(parent)
         , mainThreadTiles(allTiles)
+        , workerImage_(workerImage)
         , totalWorkerRows_(totalWorkerRows)
         , totalWorkerColumns_(totalWorkerColumns)
         , assignedWorkerRow_(workerRow)
         , assignedWorkerColumn_(workerColumn)
         , m_tileSet(allTiles)
+        , killedByEngine(false)
+        , safeToTerminate(false)
     {
         xOffset_ = assignedWorkerColumn_ * (allTiles.width()  / totalWorkerColumns_);
         yOffset_ = assignedWorkerRow_    * (allTiles.height() / totalWorkerRows_);
@@ -82,8 +86,10 @@ signals:
 public:
     QTimer*   updateTimer;
     TileSet&  mainThreadTiles;
-    bool needToResize;
+    bool      needToResize;
+    QSize     m_resizeRequest;
     QReadWriteLock heightWidthMutex_;
+    QImage&        workerImage_;
 
 protected:
     // Used to determine the width and height implicitly
@@ -94,10 +100,10 @@ protected:
     int xOffset_;
     int yOffset_;
 
-    TileSet                  m_tileSet;
-    QString                  m_id;
-    static inline QMutex     m_mutex = QMutex();
-    QSize m_resizeRequest;
+    TileSet m_tileSet;
+    QString m_id;
+    bool killedByEngine;
+    bool safeToTerminate;
 };
 
 class Engine : public QObject
@@ -116,6 +122,8 @@ public:
     explicit Engine(int width, int height, QObject* parent = nullptr);
 
     ~Engine();
+
+    void CleanupThreads();
 
     void SetupWorkerThreads(int totalRows, int totalColumns);
 
@@ -152,6 +160,9 @@ protected:
 
     QMap<QPoint, Worker*> m_workerThreads;
     std::atomic<bool> m_workersInitialized;
+
+    QImage m_workerImage;
+    int workersKilledCount;
 };
 
 #endif // ENGINE_H
