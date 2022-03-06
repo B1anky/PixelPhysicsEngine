@@ -4,6 +4,7 @@
 #include "Engine.h"
 #include "QGraphicsEngineItem.h"
 #include "QGraphicsPixelItem.h"
+#include "Hashhelpers.h"
 #include <QWidget>
 #include <QGraphicsScene>
 #include <QVBoxLayout>
@@ -12,6 +13,7 @@
 #include <QSlider>
 #include <QLabel>
 #include <QPushButton>
+#include <QSet>
 
 class QEvent;
 class QResizeEvent;
@@ -74,7 +76,7 @@ protected:
     QLineF              m_lineOverlayLine;
 
     QGraphicsPixelItem  m_previewPixelItem;
-    QVector<QPoint>     m_previewPixels;
+    QSet<QPoint>        m_previewPixels;
 
     // States
     bool    m_leftMousePressed;

@@ -200,6 +200,7 @@ void Engine::ResizeTiles(int width, int height, bool initialization){
     m_height = height;
 
     m_workerImage = QImage(m_width, m_height, QImage::Format_ARGB32);
+    m_workerImage.fill(Mat::MaterialToColorMap[Mat::Material::EMPTY]);
 
     if(m_workersInitialized){
         foreach(auto workerThread, m_workerThreads){

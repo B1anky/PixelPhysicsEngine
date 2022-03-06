@@ -63,7 +63,7 @@ PhysicsWindow::PhysicsWindow(QWidget* parent) :
     scaleSliderHLayout->addWidget(&m_scaleValueLabel);
     scaleSliderHLayout->addWidget(&m_scaleSlider);
     m_mainVLayout.addWidget(scaleSliderWidget);
-    m_scaleSlider.setRange(5, 20);
+    m_scaleSlider.setRange(1, 20);
 
     m_mainVLayout.addWidget(&m_clearButton);
 
@@ -85,6 +85,9 @@ PhysicsWindow::PhysicsWindow(QWidget* parent) :
     m_scene.addItem(&m_engineGraphicsItem);
     m_scene.addItem(&m_lineOverlayItem);
     m_scene.addItem(&m_previewPixelItem);
+
+    // TODO figure out if it's possible to get rid of the pixel opacity artifacting
+    // on the m_previewPixelItem.
 
     m_view.setMouseTracking(true);
 
@@ -129,7 +132,7 @@ void PhysicsWindow::LineAt(){
 
 void PhysicsWindow::PreviewPixelsAt(){
     m_previewPixels.clear();
-    CircleAt( [this](int i, int j){ m_previewPixels.append(QPoint(i, j)); } );
+    CircleAt( [this](int i, int j){ m_previewPixels.insert(QPoint(i, j)); } );
     m_previewPixelItem.update();
 }
 
@@ -213,16 +216,17 @@ bool PhysicsWindow::eventFilter(QObject* target, QEvent* event)
 }
 
 void PhysicsWindow::resize(){
-    int scaledWidth  = ( m_view.contentsRect().width()  / m_scale ) + 1;
-    int scaledheight = ( m_view.contentsRect().height() / m_scale ) + 1;
+
+    int scaledWidth  = ceil( m_view.contentsRect().width()  / m_scale ) + 1;
+    int scaledheight = ceil( m_view.contentsRect().height() / m_scale ) + 1;
 
     m_scene.setSceneRect(0, 0, scaledWidth, scaledheight);
 
-    m_previewPixelItem.width  = scaledWidth;
-    m_previewPixelItem.height = scaledheight;
+    m_previewPixelItem.UpdateExtents(scaledWidth, scaledheight);
 
     // Reserve or decrease space on the m_tiles.
     m_engine.ResizeTiles(scaledWidth, scaledheight);
+
 }
 
 void PhysicsWindow::resizeEvent(QResizeEvent* resizeEvent){
@@ -236,7 +240,7 @@ void PhysicsWindow::keyPressEvent(QKeyEvent* keyEvent){
         LineAt();
     }
 
-    if( keyEvent->modifiers() & Qt::ControlModifier ){
+    if(keyEvent->modifiers() & Qt::ControlModifier){
         m_controlKeyPressed = true;
     }
 
