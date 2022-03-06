@@ -25,10 +25,15 @@ void QGraphicsEngineItem::paint(QPainter* painter, const QStyleOptionGraphicsIte
 {
     painter->save();
 
+    //if(paintTiles.m_readWriteLock.tryLockForRead()){
+    //    prevFrameTiles = paintTiles;
+    //    paintTiles.m_readWriteLock.unlock();
+    //}
+
     paintTiles.m_readWriteLock.lockForRead();
 
     foreach(const QVector<Tile>& tiles, paintTiles.m_tileSet) {
-        foreach( const Tile& tile, tiles){
+        foreach(const Tile& tile, tiles){
             // set your pen color etc.
             QColor color = Mat::MaterialToColorMap[tile.element->material];
             painter->setPen(color);

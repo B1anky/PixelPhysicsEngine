@@ -70,7 +70,7 @@ PhysicsWindow::PhysicsWindow(QWidget* parent) :
     connect(&m_materialComboBox, &QComboBox::currentTextChanged, this, &PhysicsWindow::MaterialComboBoxValueChanged, Qt::DirectConnection);
     connect(&m_radiusSlider,     &QSlider::valueChanged,         this, &PhysicsWindow::SetPenRadius,                 Qt::DirectConnection);
     connect(&m_scaleSlider,      &QSlider::valueChanged,         this, &PhysicsWindow::SetScale,                     Qt::DirectConnection);
-    connect(&m_clearButton,      &QPushButton::clicked,          this, &PhysicsWindow::ClearTiles,                   Qt::DirectConnection);
+    connect(&m_clearButton,      &QPushButton::clicked,          this, &PhysicsWindow::ClearTiles,                   Qt::QueuedConnection);
 
     m_radiusSlider.setValue(m_radius);
     SetPenRadius(m_radius);
@@ -137,7 +137,6 @@ bool PhysicsWindow::eventFilter(QObject* target, QEvent* event)
 {
     auto PlaceAt = [this](int i, int j){
         m_engine.UserPlacedTile(Tile(i, j, m_engine.m_currentMaterial));
-        //m_engine.m_workerThread.m_tileSet.SetTile();
     };
 
     auto PlaceCircle = [this, PlaceAt](){

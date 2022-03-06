@@ -29,7 +29,6 @@ QString QtEnumToQString (const QEnum value)
 }
 
 class PhysicsWindow;
-static inline QReadWriteLock m_tile_mutex;
 
 class Worker : public QObject{
 
@@ -48,25 +47,21 @@ public:
         , assignedWorkerColumn_(workerColumn)
         , m_tileSet(allTiles)
     {
-        xOffset_ = assignedWorkerColumn_ * m_resizeRequest.width();
-        yOffset_ = assignedWorkerRow_    * m_resizeRequest.height();
+        xOffset_ = assignedWorkerColumn_ * (allTiles.width()  / totalWorkerColumns_);
+        yOffset_ = assignedWorkerRow_    * (allTiles.height() / totalWorkerRows_);
     }
 
     ~Worker(){
         emit finished(0);
     }
 
-    bool IsEmpty(const Tile& tile) const{
-        return tile.element->material == Mat::Material::EMPTY;
-    }
-
     void UpdateTiles();
 
     virtual void work(){
         srand(time(NULL));
-        QTimer* updateTimer = new QTimer(this);
+        updateTimer = new QTimer(this);
         updateTimer->start(33);
-        connect(updateTimer, &QTimer::timeout, this, &Worker::UpdateTiles, Qt::DirectConnection);
+        connect(updateTimer, &QTimer::timeout, this, &Worker::UpdateTiles, Qt::QueuedConnection);
     }
 
 public slots:
@@ -85,9 +80,9 @@ signals:
     void started();
 
 public:
-
+    QTimer*   updateTimer;
     TileSet&  mainThreadTiles;
-    std::atomic<bool> needToResize;
+    bool needToResize;
     QReadWriteLock heightWidthMutex_;
 
 protected:

@@ -69,7 +69,7 @@ public:
     Tile& operator=(const Tile& tile){
         if( this != &tile ){
              position = tile.position;
-             element  = tile.element;
+             SetElement(tile.element->material);
              element->parentTile = this;
         }
         return *this;

@@ -80,6 +80,7 @@ bool PhysicalElement::GravityUpdate(TileSet& tilesToUpdateAgainst){
 bool PhysicalElement::SpreadUpdate(TileSet& tilesToUpdateAgainst){
 
     bool spread = true;
+    QPoint originalPost(parentTile->position);
     int x = parentTile->position.x();
     int y = parentTile->position.y();
     QPoint spreadPoint;
@@ -118,9 +119,9 @@ bool PhysicalElement::SpreadUpdate(TileSet& tilesToUpdateAgainst){
     }
 
     if(spread){
-        heading = HeadingFromPointChange(parentTile->position, spreadPoint);
-        DeltaVelocityDueToGravity(velocity, parentTile->position, spreadPoint);
-        tilesToUpdateAgainst.Swap(parentTile->position, spreadPoint);
+        heading = HeadingFromPointChange(originalPost, spreadPoint);
+        DeltaVelocityDueToGravity(velocity, originalPost, spreadPoint);
+        tilesToUpdateAgainst.Swap(originalPost, spreadPoint);
     }
 
     return spread;
@@ -221,11 +222,10 @@ bool Liquid::SpreadUpdate(TileSet& tilesToUpdateAgainst){
         int spreadDirection = sign(heading.x());
         QPoint potentialPoint(0, 0);
         for(int finalSpreadOffset = 0; finalSpreadOffset < abs(heading.x()); ++finalSpreadOffset){
-            potentialPoint.setX(parentTile->position.x() + (spreadDirection * finalSpreadOffset));
-            potentialPoint.setY(parentTile->position.y());
+            potentialPoint.setX(spreadPoint.x() + (spreadDirection * finalSpreadOffset));
+            potentialPoint.setY(spreadPoint.y());
             if ( (!tilesToUpdateAgainst.InBounds(potentialPoint) || tilesToUpdateAgainst.TileAt(potentialPoint).element->density > density ) ){
-                spreadPoint.setX(parentTile->position.x() + (spreadDirection * finalSpreadOffset));
-                spreadPoint.setY(parentTile->position.y());
+                spreadPoint.setX(spreadPoint.x() + (spreadDirection * finalSpreadOffset));
                 heading.setX(0);
                 break;
             }else if(tilesToUpdateAgainst.IsEmpty(potentialPoint)){

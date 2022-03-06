@@ -11,39 +11,49 @@
 
 void Worker::UpdateTiles(){
 
-    if(needToResize){
-        m_tileSet.ResizeTiles(m_resizeRequest.width(), m_resizeRequest.height());
-        xOffset_ = assignedWorkerColumn_ * m_resizeRequest.width();
-        yOffset_ = assignedWorkerRow_    * m_resizeRequest.height();
-        needToResize = false;
+    if( heightWidthMutex_.tryLockForRead(5) ){
+        if(needToResize){
+            m_tileSet.ResizeTiles(m_resizeRequest.width(), m_resizeRequest.height());
+            xOffset_ = assignedWorkerColumn_ * m_resizeRequest.width();
+            yOffset_ = assignedWorkerRow_    * m_resizeRequest.height();
+            m_resizeRequest.setWidth(0);
+            m_resizeRequest.setHeight(0);
+            needToResize = false;
+        }
+        heightWidthMutex_.unlock();
     }
 
-    m_tile_mutex.lockForWrite();
-    QVector<int> localWidths(QVector<int>(m_tileSet.width()));
-    std::iota(localWidths.begin(), localWidths.end(), 0);
-    std::random_shuffle(localWidths.begin(), localWidths.end());
+    if(m_tileSet.m_readWriteLock.tryLockForWrite(5)){
+        QVector<int> localWidths(QVector<int>(m_tileSet.width()));
+        std::iota(localWidths.begin(), localWidths.end(), 0);
+        std::random_shuffle(localWidths.begin(), localWidths.end());
 
-    for (int i = 0; i < m_tileSet.width(); ++i) {
-        for (int j = m_tileSet.height() - 1; j >= 0; --j) {
-            Tile& tile = m_tileSet.TileAt(i, j);
-            if(!IsEmpty(tile)){
-                tile.Update(m_tileSet);
+        for (int i = 0; i < m_tileSet.width(); ++i) {
+            for (int j = m_tileSet.height() - 1; j >= 0; --j) {
+                Tile& tile = m_tileSet.TileAt(localWidths.at(i), j);
+                if(!m_tileSet.IsEmpty(tile)){
+                    tile.Update(m_tileSet);
+                }
             }
         }
+        m_tileSet.m_readWriteLock.unlock();
     }
-    m_tile_mutex.unlock();
 
-    m_tile_mutex.lockForRead();
-
-    // Based on current width and heights, determine where
-    // we index into the mainThreadTiles.
-    for (int i = 0; i < m_tileSet.width(); ++i) {
-        for (int j = m_tileSet.height() - 1; j >= 0; --j) {
-            mainThreadTiles.SetTile(Tile(i + xOffset_, j + yOffset_, m_tileSet.TileAt(i, j).element->material));
+    // If we need to resize and we're shrinking, we could go out of bounds.
+    if(!needToResize){
+        if(mainThreadTiles.m_readWriteLock.tryLockForWrite(5) ){
+            m_tileSet.m_readWriteLock.lockForRead();
+            // Based on current width and heights, determine where
+            // we index into the mainThreadTiles.
+            for (int i = 0; i < m_tileSet.width(); ++i) {
+                for (int j = m_tileSet.height() - 1; j >= 0; --j) {
+                    mainThreadTiles.SetTileBulkUpdate(Tile(i + xOffset_, j + yOffset_, m_tileSet.TileAt(i, j).element->material));
+                }
+            }
+            m_tileSet.m_readWriteLock.unlock();
+            mainThreadTiles.m_readWriteLock.unlock();
         }
     }
-    m_tile_mutex.unlock();
-
 }
 
 Engine::Engine(int width, int height, QObject* parent) :
@@ -60,13 +70,13 @@ Engine::Engine(int width, int height, QObject* parent) :
     ClearTiles();
     m_workersInitialized = false;
     m_updateTimer.start(33);
-    connect(&m_updateTimer, &QTimer::timeout, this, &Engine::UpdateTiles, Qt::DirectConnection);
+    connect(&m_updateTimer, &QTimer::timeout, this, &Engine::UpdateTiles, Qt::QueuedConnection);
 }
 
 void Engine::SetupWorkerThreads(int totalRows, int totalColumns){
     for(int i = 0; i < totalRows; ++i){
         for(int j = 0; j < totalColumns; ++j){
-            m_workerThreads[QPoint(i, j)] = new Worker(m_mainThreadTileSet, totalRows, totalColumns, i, j, this);
+            m_workerThreads[QPoint(i, j)] = new Worker(m_mainThreadTileSet, totalRows, totalColumns, i, j);
         }
     }
     totalWorkerRows = totalRows;
@@ -74,14 +84,18 @@ void Engine::SetupWorkerThreads(int totalRows, int totalColumns){
 }
 
 Engine::~Engine(){
-    // Determine if we should clean worker up properly or if it doesn't matter.
+    foreach(auto workerThread, m_workerThreads){
+        workerThread->updateTimer->stop();
+        emit workerThread->finished(0);
+        delete workerThread;
+    }
 }
 
 void Engine::SetEngineGraphicsItem(QGraphicsEngineItem* engineGraphicsItem){
     m_engineGraphicsItem = engineGraphicsItem;
     m_engineGraphicsItem->update();
 
-    SetupWorkerThreads(2, 2);
+    SetupWorkerThreads(2, 4);
 
     foreach(auto workerThread, m_workerThreads){
         QThread* thread = new QThread(this);
@@ -140,16 +154,16 @@ void Engine::UserPlacedTile(Tile tile){
 
     QPoint workerKey(workerRow, workerColumn);
     // We have to normalize the tile being placed into this worker.
-
-    //xOffset_ = assignedWorkerColumn_ / totalWorkerColumns_  * m_resizeRequest.width();
-    //yOffset_ = assignedWorkerRow_    / totalWorkerRows_     * m_resizeRequest.height();
-
-    Worker* worker = m_workerThreads[workerKey];
-
-    tile.position.setX(x - worker->xOffset_);
-    tile.position.setY(y - worker->yOffset_);
-    worker->m_tileSet.SetTile(tile);
-
+    Worker* worker = m_workerThreads.value(workerKey, nullptr);
+    // Can be a nullptr if the user is like half off of the view or scene with a big radius
+    if(worker != nullptr){
+        if(worker->m_tileSet.m_readWriteLock.tryLockForWrite(33)){
+            tile.position.setX(x - worker->xOffset_);
+            tile.position.setY(y - worker->yOffset_);
+            worker->m_tileSet.SetTileBulkUpdate(tile);
+            worker->m_tileSet.m_readWriteLock.unlock();
+        }
+    }
 }
 
 // PhysicsWindow will invoke this on a resize event to make the m_tiles match the size of the window.
@@ -159,16 +173,17 @@ void Engine::ResizeTiles(int width, int height, bool initialization){
     m_width  = width;
     m_height = height;
 
+    m_mainThreadTileSet.ResizeTiles(width, height, initialization);
+
     if(m_workersInitialized){
         foreach(auto workerThread, m_workerThreads){
-            workerThread->heightWidthMutex_.lockForWrite();
-            workerThread->m_resizeRequest.setWidth(m_width / totalWorkerColumns);
-            workerThread->m_resizeRequest.setHeight(m_height / totalWorkerRows);
-            workerThread->needToResize = true;
-            workerThread->heightWidthMutex_.unlock();
+            if(workerThread->heightWidthMutex_.tryLockForWrite(5)){
+                workerThread->m_resizeRequest.setWidth(m_width / totalWorkerColumns);
+                workerThread->m_resizeRequest.setHeight(m_height / totalWorkerRows);
+                workerThread->needToResize = true;
+                workerThread->heightWidthMutex_.unlock();
+            }
         }
     }
-
-    m_mainThreadTileSet.ResizeTiles(width, height, initialization);
 
 }

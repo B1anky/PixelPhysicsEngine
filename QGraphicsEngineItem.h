@@ -6,12 +6,12 @@
 #include <QVector>
 #include <QRectF>
 #include <QImage>
+#include "TileSet.h"
 
 class QPainter;
 class QStyleOptionGraphicsItem;
 class QWidget;
 class Tile;
-class TileSet;
 
 class QGraphicsEngineItem : public QGraphicsItem{
 
@@ -26,7 +26,7 @@ public:
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget = nullptr) override;
 
 public:
-
+    TileSet  prevFrameTiles;
     TileSet& paintTiles;
 };
 

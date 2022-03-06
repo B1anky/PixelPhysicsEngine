@@ -60,7 +60,7 @@ void TileSet::Update(){
 
 // Returns whether the tile is a valid coordinate to check against.
 bool TileSet::InBounds(int xPos, int yPos){
-    return xPos >= 0 && xPos < m_tileSet.size() && yPos >= 0 && yPos < m_tileSet.at(0).size();
+    return xPos >= 0 && xPos < width() && yPos >= 0 && yPos < height();
 }
 
 // Returns whether the tile is a valid coordinate to check against.
@@ -121,19 +121,14 @@ void TileSet::SetTileBulkUpdate(Tile tile){
 
 // PhysicsWindow will invoke this on a resize event to make the m_tiles match the size of the window.
 void TileSet::ResizeTiles(int width, int height, bool initialization){
+    if(width < 0 || height < 0) return;
 
-    int originalWidth  = 0;
-    int originalHeight = 0;
-    {
-        m_readWriteLock.lockForRead();
-        originalWidth  = m_tileSet.size();
-        originalHeight = originalWidth > 0 ? m_tileSet.at(0).size() : 0;
-        m_readWriteLock.unlock();
-    }
+    int originalWidth  = this->width();
+    int originalHeight = this->height();
 
     if( ( width != originalWidth || height != originalHeight ) || initialization){
 
-        m_readWriteLock.lockForWrite();
+        //m_readWriteLock.lockForWrite();
 
         // Determine how much width and height we may have gained to properly set those tiles.
         m_tileSet.resize(width);
@@ -153,7 +148,7 @@ void TileSet::ResizeTiles(int width, int height, bool initialization){
             }
         }
 
-        m_readWriteLock.unlock();
+        //m_readWriteLock.unlock();
     }
 }
 
@@ -173,7 +168,6 @@ void TileSet::Swap(int xPos1, int yPos1, int xPos2, int yPos2){
     if (!InBounds(xPos1, yPos1)) return;
     if (!InBounds(xPos2, yPos2)) return;
 
-    //m_tile_mutex.lockForRead();
     Tile& originalTile    = TileAt(xPos1, yPos1);
     Tile& destinationTile = TileAt(xPos2, yPos2);
 
