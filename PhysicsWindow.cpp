@@ -18,7 +18,7 @@ PhysicsWindow::PhysicsWindow(QWidget* parent) :
   , m_radiusSlider(Qt::Orientation::Horizontal)
   , m_scaleSlider(Qt::Orientation::Horizontal)
   , m_clearButton("Clear View")
-  , m_engineGraphicsItem(m_engine.m_mainThreadTileSet, m_engine.m_workerImage)
+  , m_engineGraphicsItem(m_engine.m_workerImage)
   , m_previewPixelItem(m_previewPixels, m_engine.m_currentMaterial)
   , m_leftMousePressed(false)
   , m_rightMousePressed(false)

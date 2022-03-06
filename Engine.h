@@ -39,20 +39,21 @@ class Worker : public QObject{
 
 public:
 
-    Worker(TileSet& allTiles, int totalWorkerRows, int totalWorkerColumns, int workerRow, int workerColumn, QImage& workerImage, QObject* parent = nullptr)
+    Worker(int totalWorkerRows, int totalWorkerColumns, int workerRow, int workerColumn, QImage& workerImage, QObject* parent = nullptr)
         : QObject(parent)
-        , mainThreadTiles(allTiles)
+        , needToResize(true)
+        , needToClear(false)
         , workerImage_(workerImage)
         , totalWorkerRows_(totalWorkerRows)
         , totalWorkerColumns_(totalWorkerColumns)
         , assignedWorkerRow_(workerRow)
         , assignedWorkerColumn_(workerColumn)
-        , m_tileSet(allTiles)
+        , m_tileSet()
         , killedByEngine(false)
         , safeToTerminate(false)
     {
-        xOffset_ = assignedWorkerColumn_ * (allTiles.width()  / totalWorkerColumns_);
-        yOffset_ = assignedWorkerRow_    * (allTiles.height() / totalWorkerRows_);
+        xOffset_ = assignedWorkerColumn_ * (workerImage.width()  / totalWorkerColumns_);
+        yOffset_ = assignedWorkerRow_    * (workerImage.height() / totalWorkerRows_);
     }
 
     ~Worker(){
@@ -85,8 +86,8 @@ signals:
 
 public:
     QTimer*   updateTimer;
-    TileSet&  mainThreadTiles;
     bool      needToResize;
+    bool      needToClear;
     QSize     m_resizeRequest;
     QReadWriteLock heightWidthMutex_;
     QImage&        workerImage_;
@@ -154,7 +155,6 @@ protected:
     int totalWorkerColumns;
 
     Mat::Material m_currentMaterial;
-    TileSet m_mainThreadTileSet;
     QTimer  m_updateTimer;
     QGraphicsEngineItem* m_engineGraphicsItem;
 

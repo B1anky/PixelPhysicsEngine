@@ -51,7 +51,7 @@ public:
     void SetTile(Tile* tile);
 
     // Controls setting tiles at a particular location, without locking. The callee must lock.
-    void SetTileBulkUpdate(Tile tile);
+    void SetTileBulkUpdate(const Tile& tile);
 
     // Convenience for getting a tile at a position.
     Tile& TileAt(int xPos, int yPos);

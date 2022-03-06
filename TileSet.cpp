@@ -113,7 +113,7 @@ void TileSet::SetTile(Tile* tile){
 }
 
 // Controls setting tiles at a particular location, without locking. The callee must lock.
-void TileSet::SetTileBulkUpdate(Tile tile){
+void TileSet::SetTileBulkUpdate(const Tile& tile){
     if(InBounds(tile)){
         m_tileSet[tile.position.x()][tile.position.y()] = tile;
     }
@@ -185,7 +185,7 @@ void TileSet::Swap(const Tile& tile1, const Tile& tile2){
 void TileSet::ClearTiles(){
     for(int i = 0; i < m_tileSet.size(); ++i){
         for(int j = 0; j < ( m_tileSet.size() > 0 ? m_tileSet.at(0).size() : 0 ); ++j){
-            SetTile(Tile(i, j, Mat::Material::EMPTY));
+            SetTileBulkUpdate(Tile(i, j, Mat::Material::EMPTY));
         }
     }
 }

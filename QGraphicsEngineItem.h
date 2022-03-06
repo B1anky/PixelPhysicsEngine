@@ -17,7 +17,7 @@ class QGraphicsEngineItem : public QGraphicsItem{
 
 public:
 
-    explicit QGraphicsEngineItem(TileSet& tileSetToPaint, QImage& imageToPaint);
+    explicit QGraphicsEngineItem(QImage& imageToPaint);
 
     QRectF boundingRect() const override;
 
@@ -27,7 +27,6 @@ public:
 
 public:
     TileSet  prevFrameTiles;
-    TileSet& paintTiles;
     QImage& paintImage;
 };
 

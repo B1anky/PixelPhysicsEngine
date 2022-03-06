@@ -6,9 +6,8 @@
 #include <QDebug>
 #include <QPoint>
 
-QGraphicsEngineItem::QGraphicsEngineItem(TileSet& tileSetToPaint, QImage& imageToPaint) :
+QGraphicsEngineItem::QGraphicsEngineItem(QImage& imageToPaint) :
     QGraphicsItem()
-  , paintTiles(tileSetToPaint)
   , paintImage(imageToPaint)
 {
     setCacheMode(QGraphicsItem::NoCache);
@@ -16,10 +15,6 @@ QGraphicsEngineItem::QGraphicsEngineItem(TileSet& tileSetToPaint, QImage& imageT
 
 QRectF QGraphicsEngineItem::boundingRect() const{
     return QRectF(0, 0, paintImage.width(), paintImage.height());
-}
-
-void QGraphicsEngineItem::SetTileSet(TileSet& tileSetToPaint){
-    paintTiles = tileSetToPaint;
 }
 
 void QGraphicsEngineItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
