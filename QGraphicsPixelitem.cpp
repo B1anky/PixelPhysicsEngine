@@ -20,7 +20,7 @@ void QGraphicsPixelItem::UpdateExtents(int width, int height){
         prepareGeometryChange();
         width_ = width;
         height_ = height;
-        pixelImage_ = QImage(width_, height_, QImage::Format_ARGB32);
+        pixelImage_ = QImage(width_, height_, QImage::Format_ARGB32_Premultiplied);
         pixelImage_.fill(QColor(0,0,0,0));
     }
 }

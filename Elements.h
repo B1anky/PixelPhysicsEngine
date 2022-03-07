@@ -13,6 +13,9 @@
 
 class Tile;
 class TileSet;
+class Worker;
+
+typedef QMap<QPoint, Worker*> WorkerMap;
 
 namespace Mat{
     Q_NAMESPACE
@@ -138,9 +141,9 @@ struct PhysicalElement : public Element{
         return !(*this == physicalElement);
     }
 
-    virtual bool Update(TileSet& tilesToUpdateAgainst);
-    virtual bool GravityUpdate(TileSet& tilesToUpdateAgainst);
-    virtual bool SpreadUpdate(TileSet& tilesToUpdateAgainst);
+    virtual bool Update(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers);
+    virtual bool GravityUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers);
+    virtual bool SpreadUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers);
 
 };
 
@@ -245,9 +248,9 @@ struct MoveableSolid : public Solid{
         return !(*this == moveableSolid);
     }
 
-    bool Update(TileSet& tilesToUpdateAgainst)        override;
-    bool GravityUpdate(TileSet& tilesToUpdateAgainst) override{ return PhysicalElement::GravityUpdate(tilesToUpdateAgainst); }
-    bool SpreadUpdate(TileSet& tilesToUpdateAgainst)  override;
+    bool Update(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers)        override;
+    bool GravityUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers) override{ return PhysicalElement::GravityUpdate(tilesToUpdateAgainst, allWorkers); }
+    bool SpreadUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers)  override;
 
 };
 
@@ -281,16 +284,16 @@ public:
         return !(*this == sand);
     }
 
-    bool Update(TileSet& tilesToUpdateAgainst) override{
-        return MoveableSolid::Update(tilesToUpdateAgainst);
+    bool Update(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers) override{
+        return MoveableSolid::Update(tilesToUpdateAgainst, allWorkers);
     }
 
-    bool GravityUpdate(TileSet& tilesToUpdateAgainst) override{
-        return MoveableSolid::Update(tilesToUpdateAgainst);
+    bool GravityUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers) override{
+        return MoveableSolid::Update(tilesToUpdateAgainst, allWorkers);
     }
 
-    bool SpreadUpdate(TileSet& tilesToUpdateAgainst) override{
-        return MoveableSolid::SpreadUpdate(tilesToUpdateAgainst);
+    bool SpreadUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers) override{
+        return MoveableSolid::SpreadUpdate(tilesToUpdateAgainst, allWorkers);
     }
 
 };
@@ -337,9 +340,9 @@ public:
         return !(*this == liquid);
     }
 
-    bool Update(TileSet& tilesToUpdateAgainst)        override;
-    bool GravityUpdate(TileSet& tilesToUpdateAgainst) override{ return PhysicalElement::GravityUpdate(tilesToUpdateAgainst); }
-    bool SpreadUpdate(TileSet& tilesToUpdateAgainst)  override;
+    bool Update(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers)        override;
+    bool GravityUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers) override{ return PhysicalElement::GravityUpdate(tilesToUpdateAgainst, allWorkers); }
+    bool SpreadUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers)  override;
 
     bool gravityUpdated;
 
@@ -376,9 +379,9 @@ public:
         return !(*this == water);
     }
 
-    bool Update(TileSet& tilesToUpdateAgainst)        override{ return Liquid::Update(tilesToUpdateAgainst);        }
-    bool GravityUpdate(TileSet& tilesToUpdateAgainst) override{ return Liquid::GravityUpdate(tilesToUpdateAgainst); }
-    bool SpreadUpdate(TileSet& tilesToUpdateAgainst)  override{ return Liquid::SpreadUpdate(tilesToUpdateAgainst);  }
+    bool Update(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers)        override{ return Liquid::Update(tilesToUpdateAgainst, allWorkers);        }
+    bool GravityUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers) override{ return Liquid::GravityUpdate(tilesToUpdateAgainst, allWorkers); }
+    bool SpreadUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers)  override{ return Liquid::SpreadUpdate(tilesToUpdateAgainst, allWorkers);  }
 
 };
 

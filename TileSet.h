@@ -3,17 +3,20 @@
 
 #include "Tile.h"
 #include <QVector>
-#include <QMutex>
+#include <QPoint>
 #include <QReadWriteLock>
 
 class TileSet
-{
+{    
+
 public:
+
+    static inline Tile InvalidTile;
 
     typedef QVector<QVector<Tile>> Tiles;
     typedef QVector<int> RandomTileIter;
 
-    TileSet();
+    TileSet(const QPoint& quadrant);
 
     TileSet(const TileSet& tileSet);
 
@@ -22,9 +25,6 @@ public:
     bool operator==(const TileSet& tileSet) const;
 
     bool operator!=(const TileSet& tileSet) const;
-
-    // Pumps these Tiles to update.
-    void Update();
 
     // Returns whether the tile is a valid coordinate to check against.
     bool InBounds(int xPos, int yPos);
@@ -71,6 +71,9 @@ public:
     // Swaps the Elements owned by the tile1 with the element at tile2.
     void Swap(const Tile& tile1, const Tile& tile2);
 
+    // Swaps the Elements owned by sourceTile in `this` quadrant with the destinationTile in destinationQuadrant.
+    void QuadrantSwap(Tile& sourceTile, Tile& destinationTile);
+
     // Sets all tiles to be the Mat::Empty material.
     void ClearTiles();
 
@@ -85,6 +88,7 @@ public:
 public:
     QReadWriteLock m_readWriteLock;
     Tiles          m_tileSet;
+    QPoint         m_quadrant;
 };
 
 #endif // TILESET_H

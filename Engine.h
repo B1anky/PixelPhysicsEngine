@@ -22,6 +22,9 @@
 class QGraphicsEngineItem;
 class Element;
 class Engine;
+class Worker;
+
+typedef QMap<QPoint, Worker*> WorkerMap;
 
 template<typename QEnum>
 QString QtEnumToQString (const QEnum value)
@@ -39,7 +42,7 @@ class Worker : public QObject{
 
 public:
 
-    Worker(int totalWorkerRows, int totalWorkerColumns, int workerRow, int workerColumn, QImage& workerImage, QObject* parent = nullptr)
+    Worker(int totalWorkerRows, int totalWorkerColumns, int workerRow, int workerColumn, QImage& workerImage, WorkerMap& workerThreads, QObject* parent = nullptr)
         : QObject(parent)
         , needToResize(true)
         , needToClear(false)
@@ -48,9 +51,10 @@ public:
         , totalWorkerColumns_(totalWorkerColumns)
         , assignedWorkerRow_(workerRow)
         , assignedWorkerColumn_(workerColumn)
-        , m_tileSet()
+        , m_tileSet(QPoint(workerRow, workerColumn))
         , killedByEngine(false)
         , safeToTerminate(false)
+        , workerThreads_(workerThreads)
     {
         xOffset_ = assignedWorkerColumn_ * (workerImage.width()  / totalWorkerColumns_);
         yOffset_ = assignedWorkerRow_    * (workerImage.height() / totalWorkerRows_);
@@ -86,13 +90,13 @@ signals:
 
 public:
     QTimer*   updateTimer;
-    bool      needToResize;
+    std::atomic<bool> needToResize;
     bool      needToClear;
     QSize     m_resizeRequest;
     QReadWriteLock heightWidthMutex_;
     QImage&        workerImage_;
 
-protected:
+//protected:
     // Used to determine the width and height implicitly
     int totalWorkerRows_;
     int totalWorkerColumns_;
@@ -105,6 +109,8 @@ protected:
     QString m_id;
     bool killedByEngine;
     bool safeToTerminate;
+
+    WorkerMap& workerThreads_;
 };
 
 class Engine : public QObject
@@ -158,7 +164,7 @@ protected:
     QTimer  m_updateTimer;
     QGraphicsEngineItem* m_engineGraphicsItem;
 
-    QMap<QPoint, Worker*> m_workerThreads;
+    WorkerMap m_workerThreads;
     std::atomic<bool> m_workersInitialized;
 
     QImage m_workerImage;

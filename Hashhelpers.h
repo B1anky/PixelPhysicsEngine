@@ -11,12 +11,18 @@ static inline bool operator<(const QPoint& p1,const QPoint& p2)
 
 static inline uint qHash(const QPoint& key, uint seed)
 {
-    return qHash(key.x() + key.y(), seed);
+    return qHash((53 + qHash(key.x())) * 53 + qHash(key.y()), seed);
 }
 
 static inline uint qHash(const Tile& key, uint seed)
 {
-    return qHash(key.position.x() + key.position.y(), seed);
+    return qHash((53 + qHash(key.position.x())) * 53 + qHash(key.position.y()), seed);
+}
+
+
+static inline uint qHash(const Tile* key, uint seed)
+{
+    return qHash((53 + qHash(key->position.x())) * 53 + qHash(key->position.y()), seed);
 }
 
 #endif // HASHHELPERS_H

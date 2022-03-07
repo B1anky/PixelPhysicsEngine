@@ -10,19 +10,46 @@
 #include <random>
 #include <time.h>
 
+#define POLLING 0
+
+#if POLLING
+static qint64 averageElapsed = 0;
+static qint64 totalElapsed = 0;
+static qint64 numRuns = 0;
+static QMutex timerMutex;
+#endif
+
+
 void Worker::UpdateTiles(){
 
     auto UpdateImage = [this](){
+
+        {
+        #if POLLING
+        QElapsedTimer timer;
+        timer.start();
+        #endif
+        }
         int localXOffset = 0;
         int localYOffset = 0;
-        for (int i = 0; i < m_tileSet.width(); ++i) {
-            localXOffset = i + xOffset_;
-            for (int j = m_tileSet.height() - 1; j >= 0; --j) {
-                localYOffset = j + yOffset_;
-                if(localXOffset < workerImage_.width() && localYOffset < workerImage_.height()){
-                    workerImage_.setPixelColor(localXOffset, localYOffset, Mat::MaterialToColorMap[m_tileSet.TileAt(i, j).element->material]);
-                }
+
+        for (int j = 0; j < m_tileSet.height(); ++j) {
+            localYOffset = j + yOffset_;
+            QRgb* pixelRow = (QRgb*)(workerImage_.bits() + (localYOffset * workerImage_.bytesPerLine()));
+            for (int i = 0; i < m_tileSet.width(); ++i) {
+                localXOffset = i + xOffset_;
+                pixelRow[localXOffset] = Mat::MaterialToColorMap[m_tileSet.TileAt(i, j).element->material].rgba();
             }
+        }
+
+        {
+        #if POLLING
+        timerMutex.lock();
+        totalElapsed   += timer.nsecsElapsed();
+        averageElapsed = totalElapsed / ++numRuns;
+        qDebug() << averageElapsed;
+        timerMutex.unlock();
+        #endif
         }
     };
 
@@ -34,9 +61,9 @@ void Worker::UpdateTiles(){
         m_resizeRequest.setWidth(0);
         m_resizeRequest.setHeight(0);
 
-        UpdateImage();
-
         needToResize = false;
+
+        UpdateImage();
     }
 
     if(needToClear){
@@ -53,13 +80,15 @@ void Worker::UpdateTiles(){
             Tile& tile = m_tileSet.TileAt(localWidths.at(i), j);
             if(!m_tileSet.IsEmpty(tile)){
                 m_tileSet.m_readWriteLock.lockForWrite();
-                tile.Update(m_tileSet);
+                tile.Update(m_tileSet, workerThreads_);
                 m_tileSet.m_readWriteLock.unlock();
             }
         }
     }
 
-    UpdateImage();
+    if(!needToResize){
+        UpdateImage();
+    }
 
     if(killedByEngine){
         updateTimer->stop();
@@ -75,7 +104,7 @@ Engine::Engine(int width, int height, QObject* parent) :
   , m_currentMaterial(Mat::Material::EMPTY)
   , m_engineGraphicsItem(nullptr)
 {
-    ::InvalidTile.element->density = std::numeric_limits<double>::max();
+    TileSet::InvalidTile.element->density = std::numeric_limits<double>::max();
 
     ResizeTiles(width, height, true);
     srand(time(NULL));
@@ -89,11 +118,11 @@ void Engine::SetupWorkerThreads(int totalRows, int totalColumns){
     workersKilledCount = 0;
     for(int i = 0; i < totalRows; ++i){
         for(int j = 0; j < totalColumns; ++j){
-            Worker* newWorker = new Worker(totalRows, totalColumns, i, j, m_workerImage);
+            Worker* newWorker = new Worker(totalRows, totalColumns, i, j, m_workerImage, m_workerThreads);
             m_workerThreads[QPoint(i, j)] = newWorker;
         }
     }
-    totalWorkerRows = totalRows;
+    totalWorkerRows    = totalRows;
     totalWorkerColumns = totalColumns;
 }
 
@@ -185,8 +214,8 @@ void Engine::UserPlacedTile(Tile tile){
     // Can be a nullptr if the user is like half off of the view or scene with a big radius
     if(worker != nullptr){
         worker->m_tileSet.m_readWriteLock.lockForWrite();
-        tile.position.setX(x - worker->xOffset_);
-        tile.position.setY(y - worker->yOffset_);
+        tile.position.setX(x - worker->xOffset_ - 1);
+        tile.position.setY(y - worker->yOffset_ - 1);
         worker->m_tileSet.SetTile(tile);
         worker->m_tileSet.m_readWriteLock.unlock();
     }
@@ -199,12 +228,12 @@ void Engine::ResizeTiles(int width, int height, bool initialization){
     m_width  = width;
     m_height = height;
 
-    m_workerImage = QImage(m_width, m_height, QImage::Format_ARGB32);
+    m_workerImage = QImage(m_width, m_height, QImage::Format_RGB32);
     m_workerImage.fill(Mat::MaterialToColorMap[Mat::Material::EMPTY]);
 
     if(m_workersInitialized){
         foreach(auto workerThread, m_workerThreads){
-            workerThread->m_resizeRequest.setWidth(m_width / totalWorkerColumns);
+            workerThread->m_resizeRequest.setWidth (m_width  / totalWorkerColumns);
             workerThread->m_resizeRequest.setHeight(m_height / totalWorkerRows);
             workerThread->needToResize = true;
         }

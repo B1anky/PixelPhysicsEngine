@@ -8,6 +8,8 @@
 #include "Elements.h"
 
 class TileSet;
+class Worker;
+typedef QMap<QPoint, Worker*> WorkerMap;
 
 struct Tile{
 
@@ -62,8 +64,8 @@ public:
         }
     }
 
-    void Update(TileSet& tilesToUpdateAgainst){
-        element->Update(tilesToUpdateAgainst);
+    void Update(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers){
+        element->Update(tilesToUpdateAgainst, allWorkers);
     }
 
     Tile& operator=(const Tile& tile){
@@ -84,10 +86,12 @@ public:
         return !(*this == tile);
     }
 
+    bool IsEmpty() const{
+        return element && element->material == Mat::Material::EMPTY;
+    }
+
     QPoint position;
     std::shared_ptr<PhysicalElement> element;
 };
-
-static inline Tile InvalidTile;
 
 #endif // TILE_H

@@ -1,12 +1,15 @@
 #include "TileSet.h"
 #include "Engine.h"
 
-TileSet::TileSet()
+TileSet::TileSet(const QPoint& quadrant)
+    : m_quadrant(quadrant)
 {
 
 }
 
-TileSet::TileSet(const TileSet& tileSet){
+TileSet::TileSet(const TileSet& tileSet)
+    : m_quadrant(tileSet.m_quadrant)
+{
     m_tileSet.resize(tileSet.width());
     for(int i = 0; i < tileSet.width(); ++i){
         m_tileSet[i].resize(tileSet.m_tileSet.at(i).size());
@@ -18,6 +21,9 @@ TileSet::TileSet(const TileSet& tileSet){
 
 TileSet& TileSet::operator=(const TileSet& tileSet){
     if(this != &tileSet){
+
+        m_quadrant = tileSet.m_quadrant;
+
         m_tileSet.resize(tileSet.width());
         for(int i = 0; i < tileSet.width(); ++i){
             m_tileSet[i].resize(tileSet.m_tileSet.at(i).size());
@@ -30,32 +36,11 @@ TileSet& TileSet::operator=(const TileSet& tileSet){
 }
 
 bool TileSet::operator==(const TileSet& tileSet) const{
-    return m_tileSet == tileSet.m_tileSet;
+    return m_quadrant == tileSet.m_quadrant;
 }
 
 bool TileSet::operator!=(const TileSet& tileSet) const{
     return !(*this == tileSet);
-}
-
-void TileSet::Update(){
-    RandomTileIter randomOrderIter(QVector<int>(m_tileSet.size()));
-    std::iota(randomOrderIter.begin(), randomOrderIter.end(), 0);
-    std::random_shuffle(randomOrderIter.begin(), randomOrderIter.end());
-
-    //m_readWriteLock.lockForWrite();
-
-    for (int i = 0; i < m_tileSet.size(); ++i) {
-        int col = std::min(randomOrderIter.at(i), m_tileSet.size() - 1);
-        for (int j = m_tileSet.at(col).size() - 1; j >= 0; --j) {
-            Tile& tile = m_tileSet[col][j];
-            if(!IsEmpty(tile)){
-                tile.Update(*this);
-            }
-        }
-    }
-
-    //m_readWriteLock.unlock();
-
 }
 
 // Returns whether the tile is a valid coordinate to check against.
@@ -128,7 +113,7 @@ void TileSet::ResizeTiles(int width, int height, bool initialization){
 
     if( ( width != originalWidth || height != originalHeight ) || initialization){
 
-        //m_readWriteLock.lockForWrite();
+        m_readWriteLock.lockForWrite();
 
         // Determine how much width and height we may have gained to properly set those tiles.
         m_tileSet.resize(width);
@@ -148,7 +133,7 @@ void TileSet::ResizeTiles(int width, int height, bool initialization){
             }
         }
 
-        //m_readWriteLock.unlock();
+        m_readWriteLock.unlock();
     }
 }
 
@@ -172,6 +157,11 @@ void TileSet::Swap(int xPos1, int yPos1, int xPos2, int yPos2){
     Tile& destinationTile = TileAt(xPos2, yPos2);
 
     originalTile.SwapElements(destinationTile);
+}
+
+void TileSet::QuadrantSwap(Tile& sourceTile, Tile& destinationTile){
+    // To be here implies everything must be in bounds.
+    sourceTile.SwapElements(destinationTile);
 }
 
 void TileSet::Swap(const QPoint& pos1, const QPoint& pos2){
