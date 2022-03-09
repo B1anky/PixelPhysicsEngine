@@ -3,7 +3,6 @@
 
 #include <QObject>
 #include <QPoint>
-#include <QDebug>
 #include <memory>
 #include "Elements.h"
 
@@ -19,8 +18,13 @@ public:
         SetElement(Mat::Material::EMPTY);
     }
 
-    ~Tile(){
-        element.reset();
+    ~Tile(){ }
+
+    Tile(const QPoint& positionIn, const std::shared_ptr<Element>& elementIn) : position(positionIn), element(elementIn){
+        // This will take ownership of elementIn.
+        if(element){
+            element->active = true;
+        }
     }
 
     Tile(int xPosIn, int yPosIn, Mat::Material material) : position(xPosIn, yPosIn), element(nullptr){
@@ -64,15 +68,19 @@ public:
         }
     }
 
-    void Update(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers){
-        element->Update(tilesToUpdateAgainst, allWorkers);
+    void Update(TileSet& tilesToUpdateAgainst, Worker* bossWorker){
+        element->Update(tilesToUpdateAgainst, bossWorker);
     }
 
     Tile& operator=(const Tile& tile){
         if( this != &tile ){
              position = tile.position;
-             SetElement(tile.element->material);
-             element->parentTile = this;
+             if(tile.element == nullptr){
+                SetElement(tile.element->material);
+             }else{
+                element = tile.element;
+                element->parentTile = this;
+             }
         }
         return *this;
     }
@@ -91,7 +99,7 @@ public:
     }
 
     QPoint position;
-    std::shared_ptr<PhysicalElement> element;
+    std::shared_ptr<Element> element;
 };
 
 #endif // TILE_H

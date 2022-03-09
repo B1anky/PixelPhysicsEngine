@@ -6,6 +6,7 @@
 #include <QColor>
 #include <limits>
 #include <QPoint>
+#include "GeneralHashHelpers.h"
 
 #define AMBIENT_TEMP     20.0  // Celsius
 #define DEFAULT_LIFETIME 1000  // ms
@@ -51,7 +52,8 @@ struct Element
       , onFire(false)
       , velocity(0)
       , heading(QPoint(0,0))
-      , parentTile(parentTileIn) { }
+      , parentTile(parentTileIn)
+      , active(true) { }
 
     virtual ~Element(){}
 
@@ -62,7 +64,8 @@ struct Element
       , density(element.density)
       , onFire(element.onFire)
       , velocity(element.velocity)
-      , heading(element.heading){ }
+      , heading(element.heading)
+      , active(element.active){ }
 
     Element& operator=(const Element& element){
         if(this != &element){
@@ -73,6 +76,7 @@ struct Element
             onFire      = element.onFire;
             velocity    = element.velocity;
             heading     = element.heading;
+            active      = element.active;
         }
         return *this;
     }
@@ -84,7 +88,8 @@ struct Element
               && density     == element.density
               && onFire      == element.onFire
               && velocity    == element.velocity
-              && heading     == element.heading;
+              && heading     == element.heading
+              && active      == element.active;
     }
 
     bool operator!=(const Element& element) const{
@@ -99,10 +104,22 @@ struct Element
       , onFire(false)
       , velocity(0)
       , heading(QPoint(0, 0))
-      , parentTile(parentTileIn) { }
+      , parentTile(parentTileIn)
+      , active(true){ }
 
-    virtual bool Update(){
+    virtual bool Update(TileSet& /*tilesToUpdateAgainst*/, Worker* /*bossWorker*/){
         return false;
+    }
+
+    // Used during Worker::NeighborSwap and Worker::Update.
+    // Valid eneuqueing will deactivate this element, while
+    // dequeuing will activate this element. If deactivated,
+    // it will short circuit this element's next update step
+    // for its current boss. (e.g. if NeighborSwapped during
+    // a gravity call, a liquid will not call its SpreadUpdate
+    // after anymore.
+    void SetActivated(bool toActivate){
+        active = toActivate;
     }
 
     Mat::Material material;
@@ -113,6 +130,7 @@ struct Element
     int           velocity;
     QPoint        heading; // x, y heading
     Tile*         parentTile;
+    bool          active; // Innactive when placed into a Worker's queue. Short circuits updatings anymore.
 };
 
 struct PhysicalElement : public Element{
@@ -141,9 +159,9 @@ struct PhysicalElement : public Element{
         return !(*this == physicalElement);
     }
 
-    virtual bool Update(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers);
-    virtual bool GravityUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers);
-    virtual bool SpreadUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers);
+    virtual bool Update(TileSet& tilesToUpdateAgainst, Worker* bossWorker);
+    virtual bool GravityUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWorker);
+    virtual bool SpreadUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWorker);
 
 };
 
@@ -248,9 +266,9 @@ struct MoveableSolid : public Solid{
         return !(*this == moveableSolid);
     }
 
-    bool Update(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers)        override;
-    bool GravityUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers) override{ return PhysicalElement::GravityUpdate(tilesToUpdateAgainst, allWorkers); }
-    bool SpreadUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers)  override;
+    bool Update(TileSet& tilesToUpdateAgainst, Worker* bossWorker)        override;
+    bool GravityUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWorker) override{ return PhysicalElement::GravityUpdate(tilesToUpdateAgainst, bossWorker); }
+    bool SpreadUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWorker)  override;
 
 };
 
@@ -284,16 +302,16 @@ public:
         return !(*this == sand);
     }
 
-    bool Update(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers) override{
-        return MoveableSolid::Update(tilesToUpdateAgainst, allWorkers);
+    bool Update(TileSet& tilesToUpdateAgainst, Worker* bossWorker) override{
+        return MoveableSolid::Update(tilesToUpdateAgainst, bossWorker);
     }
 
-    bool GravityUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers) override{
-        return MoveableSolid::Update(tilesToUpdateAgainst, allWorkers);
+    bool GravityUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWorker) override{
+        return MoveableSolid::Update(tilesToUpdateAgainst, bossWorker);
     }
 
-    bool SpreadUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers) override{
-        return MoveableSolid::SpreadUpdate(tilesToUpdateAgainst, allWorkers);
+    bool SpreadUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWorker) override{
+        return MoveableSolid::SpreadUpdate(tilesToUpdateAgainst, bossWorker);
     }
 
 };
@@ -340,9 +358,9 @@ public:
         return !(*this == liquid);
     }
 
-    bool Update(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers)        override;
-    bool GravityUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers) override{ return PhysicalElement::GravityUpdate(tilesToUpdateAgainst, allWorkers); }
-    bool SpreadUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers)  override;
+    bool Update(TileSet& tilesToUpdateAgainst, Worker* bossWorker)        override;
+    bool GravityUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWorker) override{ return PhysicalElement::GravityUpdate(tilesToUpdateAgainst, bossWorker); }
+    bool SpreadUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWorker)  override;
 
     bool gravityUpdated;
 
@@ -379,9 +397,9 @@ public:
         return !(*this == water);
     }
 
-    bool Update(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers)        override{ return Liquid::Update(tilesToUpdateAgainst, allWorkers);        }
-    bool GravityUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers) override{ return Liquid::GravityUpdate(tilesToUpdateAgainst, allWorkers); }
-    bool SpreadUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers)  override{ return Liquid::SpreadUpdate(tilesToUpdateAgainst, allWorkers);  }
+    bool Update(TileSet& tilesToUpdateAgainst, Worker* bossWorker)        override{ return Liquid::Update(tilesToUpdateAgainst, bossWorker);        }
+    bool GravityUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWorker) override{ return Liquid::GravityUpdate(tilesToUpdateAgainst, bossWorker); }
+    bool SpreadUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWorker)  override{ return Liquid::SpreadUpdate(tilesToUpdateAgainst, bossWorker);  }
 
 };
 

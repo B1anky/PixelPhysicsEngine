@@ -71,6 +71,20 @@ void Worker::UpdateTiles(){
         needToClear = false;
     }
 
+    // Empty our queue for requests or send them back to the sender.
+    requestReadWriteLock_.lockForRead();
+    while( !requestQueue_.empty() ) {
+        const WorkerPacket& topWorkerPacket = requestQueue_.front();
+        // Take ownership of the element
+        if( m_tileSet.IsEmpty(topWorkerPacket.destinationPosition_) ){
+            m_tileSet.SetTile(Tile(topWorkerPacket.destinationPosition_, topWorkerPacket.element_));
+        }else{
+            NeighborSwap(NeighborDirection(topWorkerPacket.sourceWorker_), topWorkerPacket.element_);
+        }
+        requestQueue_.pop_front();
+    }
+    requestReadWriteLock_.unlock();
+
     QVector<int> localWidths(QVector<int>(m_tileSet.width()));
     std::iota(localWidths.begin(), localWidths.end(), 0);
     std::random_shuffle(localWidths.begin(), localWidths.end());
@@ -80,7 +94,7 @@ void Worker::UpdateTiles(){
             Tile& tile = m_tileSet.TileAt(localWidths.at(i), j);
             if(!m_tileSet.IsEmpty(tile)){
                 m_tileSet.m_readWriteLock.lockForWrite();
-                tile.Update(m_tileSet, workerThreads_);
+                tile.Update(m_tileSet, this);
                 m_tileSet.m_readWriteLock.unlock();
             }
         }
@@ -119,7 +133,7 @@ void Engine::SetupWorkerThreads(int totalRows, int totalColumns){
     for(int i = 0; i < totalRows; ++i){
         for(int j = 0; j < totalColumns; ++j){
             Worker* newWorker = new Worker(totalRows, totalColumns, i, j, m_workerImage, m_workerThreads);
-            m_workerThreads[QPoint(i, j)] = newWorker;
+            m_workerThreads[QPoint(j, i)] = newWorker;
         }
     }
     totalWorkerRows    = totalRows;
@@ -160,6 +174,10 @@ void Engine::SetEngineGraphicsItem(QGraphicsEngineItem* engineGraphicsItem){
         workerThread->setup(thread, QString("Row: %0, Column: %1").arg(workerThread->assignedWorkerRow_).arg(workerThread->assignedWorkerColumn_));
         workerThread->moveToThread(thread);
         thread->start();
+    }
+
+    foreach(auto workerThread, m_workerThreads){
+        workerThread->FindNeighbors();
     }
 
     m_workersInitialized = true;
@@ -208,7 +226,7 @@ void Engine::UserPlacedTile(Tile tile){
     --workerRow;
     --workerColumn;
 
-    QPoint workerKey(workerRow, workerColumn);
+    QPoint workerKey(workerColumn, workerRow);
     // We have to normalize the tile being placed into this worker.
     Worker* worker = m_workerThreads.value(workerKey, nullptr);
     // Can be a nullptr if the user is like half off of the view or scene with a big radius

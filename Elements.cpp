@@ -45,11 +45,11 @@ bool HorizontalDirectionFromHeading(const QPoint& heading){
     return heading.x() != 0 ? sign(heading.x()) < 0 : ( rand() % 100 ) < 50;
 }
 
-bool PhysicalElement::Update(TileSet& /*tilesToUpdateAgainst*/, const WorkerMap& /*allWorkers*/){
+bool PhysicalElement::Update(TileSet& /*tilesToUpdateAgainst*/,  Worker* /*bossWorker*/){
     return false;
 }
 
-bool PhysicalElement::GravityUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers){
+bool PhysicalElement::GravityUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWorker){
     bool abidedToGravity = false;
 
     // a positive y implies gravity down, because it's so more dense than air.
@@ -65,45 +65,38 @@ bool PhysicalElement::GravityUpdate(TileSet& tilesToUpdateAgainst, const WorkerM
                 || ( ( tilesToUpdateAgainst.TileAt(gravitatedPoint).element->density < density ) && ( yDirection > 0 ) )  // We want to move down and we're more dense
                 || ( ( tilesToUpdateAgainst.TileAt(gravitatedPoint).element->density > density ) && ( yDirection < 0 ) ); // We want to move up and we're less dense
 
+    // Nice, efficient quick internal swapping logic. No neighbors needed. Most cases will fall into this.
     if(canSwap){
 
         heading = HeadingFromPointChange(parentTile->position, gravitatedPoint);
-
         //DeltaVelocityDueToGravity(velocity, parentTile->position, gravitatedPoint);
-
         tilesToUpdateAgainst.Swap(parentTile->position, gravitatedPoint);
         abidedToGravity = true;
-    }else if(yDirection > 0 && !tilesToUpdateAgainst.InBounds(gravitatedPoint)){
 
-        // Do we have a quadrant below us?
-        Worker* workerBelow = allWorkers.value(tilesToUpdateAgainst.m_quadrant + QPoint(1, 0), nullptr);
-        if(workerBelow != nullptr){
+    }
+    // If going down goes out of bounds, attempt to swap with our bottom neighbor.
+    else if(yDirection > 0 && !tilesToUpdateAgainst.InBounds(gravitatedPoint)){
 
-            gravitatedPoint.setY(0);
-
-            //if(workerBelow->m_tileSet.m_readWriteLock.tryLockForRead(5)){
-                // Swap tile with the other quadrant below.
-                // Height 0 in the quadrant below would be the "bottom" of this quadrant
-                Tile& otherQuadrantTile = workerBelow->m_tileSet.TileAt(gravitatedPoint);
-
-                canSwap = otherQuadrantTile.IsEmpty()
-                   || ( ( otherQuadrantTile.element->density < density ) && ( yDirection > 0 ) );  // We want to move down and we're more dense
-                if(canSwap){
-                    heading = HeadingFromPointChange(QPoint(parentTile->position.x(), -1), gravitatedPoint);
-
-                    parentTile->SwapElements(otherQuadrantTile);
-
-                    abidedToGravity = true;
-                }
-                //workerBelow->m_tileSet.m_readWriteLock.unlock();
-            //}
+        // Do we have a quadrant below us? If not, then we're actually on the ground.
+        if(bossWorker->NeighborSwap(Worker::Direction::BOTTOM, parentTile->element)){
+            active = false;
         }
-    }// Else if we're less dense and floating up, so check the workerAbove... TODO when we get to gases
+
+    }
+    // If going up goes out of bounds, attempt to swap with our top neighbor.
+    else if(yDirection < 0 && !tilesToUpdateAgainst.InBounds(gravitatedPoint)){
+
+        // Do we have a quadrant above us? If not, then we're actually on the ceiling.
+        if(bossWorker->NeighborSwap(Worker::Direction::TOP, parentTile->element)){
+            active = false;
+        }
+
+    }
 
     return abidedToGravity;
 }
 
-bool PhysicalElement::SpreadUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers){
+bool PhysicalElement::SpreadUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWorker){
 
     bool spread = true;
     QPoint originalPoint(parentTile->position);
@@ -111,155 +104,75 @@ bool PhysicalElement::SpreadUpdate(TileSet& tilesToUpdateAgainst, const WorkerMa
     int y = parentTile->position.y();
     QPoint spreadPoint;
 
-    bool canSpreadLeft                    = tilesToUpdateAgainst.IsEmpty(x - 1, y);
-    bool canSpreadRight                   = tilesToUpdateAgainst.IsEmpty(x + 1, y);
-    bool canSpreadBottomLeft              = tilesToUpdateAgainst.IsEmpty(x - 1, y + 1) && canSpreadLeft;
-    bool canSpreadBottomRight             = tilesToUpdateAgainst.IsEmpty(x + 1, y + 1) && canSpreadRight;
-    bool canSpreadBottomLeftDueToDensity  = tilesToUpdateAgainst.TileAt(x - 1, y + 1).element->density < density && canSpreadLeft;
-    bool canSpreadBottomRightDueToDensity = tilesToUpdateAgainst.TileAt(x + 1, y + 1).element->density < density && canSpreadRight;
+    bool canSpreadLeft                    = ( tilesToUpdateAgainst.IsEmpty(x - 1, y)   ) || bossWorker->HasNeighbor(Worker::Direction::LEFT);
+    bool canSpreadRight                   = ( tilesToUpdateAgainst.IsEmpty(x + 1, y)   ) || bossWorker->HasNeighbor(Worker::Direction::RIGHT);
+    bool canSpreadBottomLeft              = ( tilesToUpdateAgainst.IsEmpty(x - 1, y + 1) || bossWorker->HasNeighbor(Worker::Direction::BOTTOM_LEFT) )  && canSpreadLeft;
+    bool canSpreadBottomRight             = ( tilesToUpdateAgainst.IsEmpty(x + 1, y + 1) || bossWorker->HasNeighbor(Worker::Direction::BOTTOM_RIGHT) ) && canSpreadRight;
+    bool canSpreadBottomLeftDueToDensity  = ( tilesToUpdateAgainst.TileAt (x - 1, y + 1).element->density < density || bossWorker->HasNeighbor(Worker::Direction::BOTTOM_LEFT) ) && canSpreadLeft;
+    bool canSpreadBottomRightDueToDensity = ( tilesToUpdateAgainst.TileAt (x + 1, y + 1).element->density < density || bossWorker->HasNeighbor(Worker::Direction::BOTTOM_RIGHT) ) && canSpreadRight;
+
+    Worker* targetNeighbor(nullptr);
 
     if (canSpreadBottomLeft && canSpreadBottomRight) { // bottom right or bottom left based on heading
         bool left = HorizontalDirectionFromHeading(heading);
-        spreadPoint = left ? QPoint(x - 1, y + 1) : QPoint(x + 1, y + 1);
+        spreadPoint    = left ? QPoint(x - 1, y + 1) : QPoint(x + 1, y + 1);
+        targetNeighbor = left ? bossWorker->bottomNeighbor_ : bossWorker->bottomNeighbor_;
     } else if (canSpreadBottomLeft) { // bottom left
-        spreadPoint = QPoint(x - 1, y + 1);
+        spreadPoint    = QPoint(x - 1, y + 1);
+        targetNeighbor = bossWorker->bottomLeftNeighbor_;
     } else if (canSpreadBottomRight) { // bottom right
-        spreadPoint = QPoint(x + 1, y + 1);
+        spreadPoint    = QPoint(x + 1, y + 1);
+        targetNeighbor = bossWorker->bottomRightNeighbor_;
     } else if (canSpreadBottomLeftDueToDensity && canSpreadBottomRightDueToDensity) { // bottom right or left based on heading (against delta density)
         bool left = HorizontalDirectionFromHeading(heading);
-        spreadPoint = left ? QPoint(x - 1, y + 1) : QPoint(x + 1, y + 1);
+        spreadPoint    = left ? QPoint(x - 1, y + 1) : QPoint(x + 1, y + 1);
+        targetNeighbor = left ? bossWorker->bottomNeighbor_ : bossWorker->bottomNeighbor_;
     } else if (canSpreadBottomLeftDueToDensity) { // bottom left (less dense)
-        spreadPoint = QPoint(x - 1, y + 1);
+        spreadPoint    = QPoint(x - 1, y + 1);
+        targetNeighbor = bossWorker->bottomLeftNeighbor_;
     } else if (canSpreadBottomRightDueToDensity) { // bottom right (less dense)
-        spreadPoint = QPoint(x + 1, y + 1);
+        spreadPoint    = QPoint(x + 1, y + 1);
+        targetNeighbor = bossWorker->bottomRightNeighbor_;
     } else if (canSpreadLeft && canSpreadRight) { // right or left based on heading
         bool left = HorizontalDirectionFromHeading(heading);
-        spreadPoint = left ? QPoint(x - 1, y) : QPoint(x + 1, y);
+        spreadPoint    = left ? QPoint(x - 1, y) : QPoint(x + 1, y);
+        targetNeighbor = left ? bossWorker->leftNeighbor_ : bossWorker->rightNeighbor_;
     } else if (canSpreadLeft) { // left
-        spreadPoint = QPoint(x - 1, y);
+        spreadPoint    = QPoint(x - 1, y);
+        targetNeighbor = bossWorker->leftNeighbor_;
     } else if (canSpreadRight) { // right
         spreadPoint = QPoint(x + 1, y);
+        targetNeighbor = bossWorker->rightNeighbor_;
     }else{
-
-        Tile* swappableLeftQuadrantTile(nullptr);
-        Tile* swappableRightQuadrantTile(nullptr);
-        Tile* swappableBottomLeftQuadrantTile(nullptr);
-        Tile* swappableBottomRightQuadrantTile(nullptr);
-
-        // If we can't go left anymore in our quadrant...
-        if(!tilesToUpdateAgainst.InBounds(originalPoint + QPoint(-1, 0))){
-            Worker* leftWorker = allWorkers.value(tilesToUpdateAgainst.m_quadrant + QPoint(0, -1), nullptr);
-            if(leftWorker != nullptr && leftWorker->m_tileSet.m_readWriteLock.tryLockForRead()){
-                TileSet& leftTileSet   = leftWorker->m_tileSet;
-                Tile& leftQuadrantTile = leftTileSet.TileAt(leftTileSet.width() - 1, originalPoint.y()); // tile left at current height in left quadrant
-                if(leftQuadrantTile.IsEmpty() || leftQuadrantTile.element->density < density){
-                    heading = HeadingFromPointChange(originalPoint, originalPoint + QPoint(-1, 0));
-                    DeltaVelocityDueToGravity(velocity, originalPoint, originalPoint + QPoint(-1, 0));
-                    canSpreadLeft = true;
-                    swappableLeftQuadrantTile = &leftQuadrantTile;
-                }
-                leftWorker->m_tileSet.m_readWriteLock.unlock();
-            }
-        }
-
-        // If we can't go right anymore in our quadrant...
-        if(!tilesToUpdateAgainst.InBounds(originalPoint + QPoint(1, 0))){
-            Worker* rightWorker = allWorkers.value(tilesToUpdateAgainst.m_quadrant + QPoint(0, 1), nullptr);
-            if(rightWorker != nullptr && rightWorker->m_tileSet.m_readWriteLock.tryLockForRead()){
-                TileSet& rightTileSet  = rightWorker->m_tileSet;
-                Tile& rightQuadrantTile = rightTileSet.TileAt(0, originalPoint.y()); // tile right at current height in right quadrant
-                if(rightQuadrantTile.IsEmpty() || rightQuadrantTile.element->density < density){
-                    heading = HeadingFromPointChange(originalPoint, originalPoint + QPoint(1, 0));
-                    DeltaVelocityDueToGravity(velocity, originalPoint, originalPoint + QPoint(1, 0));
-                    canSpreadRight = true;
-                    swappableRightQuadrantTile = &rightQuadrantTile;
-                }
-                rightWorker->m_tileSet.m_readWriteLock.unlock();
-            }
-        }
-
-        // We prioritize bottom left and right first, so since everything failed up above, do we have a quadrant below us to the left?
-        // Also we have to be careful at the edge of 4 quadrants that we properly handle checking against the right tile since
-        // going left could give us a Nth column quadrant and going right could be a Nth + 1 column quadrant.
-        // If we can't go bottom left anymore in our quadrant...
-        if(!tilesToUpdateAgainst.InBounds(originalPoint + QPoint(-1, 1))){
-            Worker* bottomLeftWorker = allWorkers.value(tilesToUpdateAgainst.m_quadrant + QPoint(1, -1), nullptr);
-            // This is very unlikely to occur...
-            if(bottomLeftWorker != nullptr && bottomLeftWorker->m_tileSet.m_readWriteLock.tryLockForRead()){
-                TileSet& bottomLeftTileSet = bottomLeftWorker->m_tileSet;
-                Tile& bottomLeftQuadrantTile = bottomLeftTileSet.TileAt(bottomLeftTileSet.width() - 1, 0); // top right of the bottom left quadrant
-                if(bottomLeftQuadrantTile.IsEmpty() || bottomLeftQuadrantTile.element->density < density){
-                    heading = HeadingFromPointChange(originalPoint, originalPoint + QPoint(-1, 1));
-                    DeltaVelocityDueToGravity(velocity, originalPoint, originalPoint + QPoint(-1, 1));
-                    canSpreadBottomLeft = true;
-                    swappableBottomLeftQuadrantTile = &bottomLeftQuadrantTile;
-                }
-                bottomLeftWorker->m_tileSet.m_readWriteLock.unlock();
-            }
-        }
-
-        // If we can't go bottom right anymore in our quadrant...
-        if(!tilesToUpdateAgainst.InBounds(originalPoint + QPoint(1, 1))){
-            // Now the same logic, but for the bottom right quadrant...
-            Worker* bottomRightWorker = allWorkers.value(tilesToUpdateAgainst.m_quadrant + QPoint(1, 1), nullptr);
-            // This is very unlikely to occur as well...
-            if(bottomRightWorker != nullptr && bottomRightWorker->m_tileSet.m_readWriteLock.tryLockForRead()){
-                TileSet& bottomRightTileSet = bottomRightWorker->m_tileSet;
-                Tile& bottomRightQuadrantTile = bottomRightTileSet.TileAt(0, 0); // top left of the bottom right quadrant
-                if(bottomRightQuadrantTile.IsEmpty() || bottomRightQuadrantTile.element->density < density){
-                    heading = HeadingFromPointChange(originalPoint, originalPoint + QPoint(1, 1));
-                    DeltaVelocityDueToGravity(velocity, originalPoint, originalPoint + QPoint(1, 1));
-                    canSpreadBottomRight = true;
-                    swappableBottomRightQuadrantTile = &bottomRightQuadrantTile;
-                }
-                bottomRightWorker->m_tileSet.m_readWriteLock.unlock();
-            }
-        }
-
-        if (canSpreadBottomLeft && canSpreadBottomRight) { // bottom right or bottom left based on heading
-            bool left = HorizontalDirectionFromHeading(heading);
-            left ? parentTile->SwapElements(*swappableBottomLeftQuadrantTile) : parentTile->SwapElements(*swappableBottomRightQuadrantTile);
-            return true;
-        } else if (canSpreadBottomLeft) { // bottom left
-            parentTile->SwapElements(*swappableBottomLeftQuadrantTile);
-            return true;
-        } else if (canSpreadBottomRight) { // bottom right
-            parentTile->SwapElements(*swappableBottomRightQuadrantTile);
-            return true;
-        } else if (canSpreadLeft && canSpreadRight) { // right or left based on heading
-            bool left = HorizontalDirectionFromHeading(heading);
-            left ? parentTile->SwapElements(*swappableLeftQuadrantTile) : parentTile->SwapElements(*swappableRightQuadrantTile);
-            return true;
-        } else if (canSpreadLeft) { // left
-            parentTile->SwapElements(*swappableLeftQuadrantTile);
-            return true;
-        } else if (canSpreadRight) { // right
-            parentTile->SwapElements(*swappableRightQuadrantTile);
-            return true;
-        }else{
-            // Couldn't spread to any other quadrant...
-            spread = false;
-        }
-
+        // Couldn't spread to any other quadrant...
+        spread = false;
     }
 
     if(spread){
-        heading = HeadingFromPointChange(originalPoint, spreadPoint);
-        DeltaVelocityDueToGravity(velocity, originalPoint, spreadPoint);
-        tilesToUpdateAgainst.Swap(originalPoint, spreadPoint);
+        //If spread point is in bounds, we can just do it, if not we need to try swapping with the neighbor.
+        if(tilesToUpdateAgainst.IsEmpty(spreadPoint)){
+            heading = HeadingFromPointChange(originalPoint, spreadPoint);
+            DeltaVelocityDueToGravity(velocity, originalPoint, spreadPoint);
+            tilesToUpdateAgainst.Swap(originalPoint, spreadPoint);
+        }else if(!tilesToUpdateAgainst.InBounds(spreadPoint) && targetNeighbor != nullptr && bossWorker->NeighborSwap(bossWorker->NeighborDirection(targetNeighbor), this->parentTile->element)){
+            heading = HeadingFromPointChange(originalPoint, spreadPoint);
+            DeltaVelocityDueToGravity(velocity, originalPoint, spreadPoint);
+            active = false;
+        }
     }
 
     return spread;
 }
 
-bool MoveableSolid::Update(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers){
-    bool dirtied = MoveableSolid::GravityUpdate(tilesToUpdateAgainst, allWorkers);
-    dirtied |= MoveableSolid::SpreadUpdate(tilesToUpdateAgainst, allWorkers);
-
+bool MoveableSolid::Update(TileSet& tilesToUpdateAgainst, Worker* bossWorker){
+    bool dirtied = MoveableSolid::GravityUpdate(tilesToUpdateAgainst, bossWorker);
+    if(active){
+        dirtied |= MoveableSolid::SpreadUpdate(tilesToUpdateAgainst, bossWorker);
+    }
     return dirtied;
 }
 
-bool MoveableSolid::SpreadUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers){
+bool MoveableSolid::SpreadUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWorker){
     bool spread = true;
     int x = parentTile->position.x();
     int y = parentTile->position.y();
@@ -299,21 +212,22 @@ bool MoveableSolid::SpreadUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap&
     return spread;
 }
 
-bool Liquid::Update(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers){
-    bool dirtied = Liquid::GravityUpdate(tilesToUpdateAgainst, allWorkers);
-    gravityUpdated = dirtied;
-    dirtied |= Liquid::SpreadUpdate(tilesToUpdateAgainst, allWorkers);
-
+bool Liquid::Update(TileSet& tilesToUpdateAgainst, Worker* bossWorker){
+    bool dirtied = Liquid::GravityUpdate(tilesToUpdateAgainst, bossWorker);
+    //if(active){
+    //    gravityUpdated = dirtied;
+    //    dirtied |= Liquid::SpreadUpdate(tilesToUpdateAgainst, bossWorker);
+    //}
     return dirtied;
 }
 
-bool Liquid::SpreadUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWorkers){
-    bool didSpread = PhysicalElement::SpreadUpdate(tilesToUpdateAgainst, allWorkers);
+bool Liquid::SpreadUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWorker){
+    bool didSpread = PhysicalElement::SpreadUpdate(tilesToUpdateAgainst, bossWorker);
 
-    if(!gravityUpdated && !didSpread){
+    if(active && !gravityUpdated && !didSpread){
 
         if(heading.x() == 0){
-            int spread = tilesToUpdateAgainst.width() * allWorkers.value(tilesToUpdateAgainst.m_quadrant)->totalWorkerColumns_;
+            int spread = bossWorker->workerImage_.width();
             bool left = HorizontalDirectionFromHeading(heading);
             // Should compound the liquid's heading in its already moving direction
             heading.setX(left ? spread : -spread );
@@ -350,62 +264,62 @@ bool Liquid::SpreadUpdate(TileSet& tilesToUpdateAgainst, const WorkerMap& allWor
             potentialPoint.setX(spreadPoint.x() + (spreadDirection * finalSpreadOffset));
             potentialPoint.setY(spreadPoint.y());
             bool outOfBounds = !tilesToUpdateAgainst.InBounds(potentialPoint);
-            if ( (outOfBounds || tilesToUpdateAgainst.TileAt(potentialPoint).element->density > density ) ){
+//            if ( (outOfBounds || tilesToUpdateAgainst.TileAt(potentialPoint).element->density > density ) ){
 
-                // If specifically we're not in bounds towards the potential point, we should check to see if there's a quadrant to our left.
-                if(outOfBounds){
+//                // If specifically we're not in bounds towards the potential point, we should check to see if there's a quadrant to our left.
+//                if(outOfBounds){
 
-                    // negative spreadDirection implies we should see if we have a quadrant to our left and if we can swap with its right side.
-                    if(spreadDirection < 0){
+//                    // negative spreadDirection implies we should see if we have a quadrant to our left and if we can swap with its right side.
+//                    if(spreadDirection < 0){
 
-                        Tile* swappableLeftQuadrantTile(nullptr);
-                        // If we can't go left anymore in our quadrant...
-                        Worker* leftWorker = allWorkers.value(tilesToUpdateAgainst.m_quadrant + QPoint(0, -1), nullptr);
-                        if(leftWorker != nullptr && leftWorker->m_tileSet.m_readWriteLock.tryLockForRead()){
-                            TileSet& leftTileSet   = leftWorker->m_tileSet;
-                            Tile& leftQuadrantTile = leftTileSet.TileAt(leftTileSet.width() - finalSpreadOffset, potentialPoint.y()); // tile left at current height in left quadrant
-                            if(leftQuadrantTile.IsEmpty() || leftQuadrantTile.element->density < density){
-                                swappableLeftQuadrantTile = &leftQuadrantTile;
-                            }
-                            leftWorker->m_tileSet.m_readWriteLock.unlock();
-                        }
+//                        Tile* swappableLeftQuadrantTile(nullptr);
+//                        // If we can't go left anymore in our quadrant...
+//                        Worker* leftWorker = allWorkers.value(tilesToUpdateAgainst.m_quadrant + QPoint(0, -1), nullptr);
+//                        if(leftWorker != nullptr && leftWorker->m_tileSet.m_readWriteLock.tryLockForRead()){
+//                            TileSet& leftTileSet   = leftWorker->m_tileSet;
+//                            Tile& leftQuadrantTile = leftTileSet.TileAt(leftTileSet.width() - finalSpreadOffset, potentialPoint.y()); // tile left at current height in left quadrant
+//                            if(leftQuadrantTile.IsEmpty() || leftQuadrantTile.element->density < density){
+//                                swappableLeftQuadrantTile = &leftQuadrantTile;
+//                            }
+//                            leftWorker->m_tileSet.m_readWriteLock.unlock();
+//                        }
 
-                        if(swappableLeftQuadrantTile != nullptr){
-                            heading.setX(0);
-                            parentTile->SwapElements(*swappableLeftQuadrantTile);
-                            return true;
-                        }
+//                        if(swappableLeftQuadrantTile != nullptr){
+//                            heading.setX(0);
+//                            parentTile->SwapElements(*swappableLeftQuadrantTile);
+//                            return true;
+//                        }
 
-                    }else if(spreadDirection > 0){
-                        Tile* swappableRightQuadrantTile(nullptr);
-                        // If we can't go left anymore in our quadrant...
-                        Worker* rightWorker = allWorkers.value(tilesToUpdateAgainst.m_quadrant + QPoint(0, 1), nullptr);
-                        if(rightWorker != nullptr && rightWorker->m_tileSet.m_readWriteLock.tryLockForRead()){
-                            TileSet& rightTileSet   = rightWorker->m_tileSet;
-                            Tile& rightQuadrantTile = rightTileSet.TileAt(finalSpreadOffset, potentialPoint.y()); // tile left at current height in left quadrant
-                            if(rightQuadrantTile.IsEmpty() || rightQuadrantTile.element->density < density){
-                                swappableRightQuadrantTile = &rightQuadrantTile;
-                            }
-                            rightWorker->m_tileSet.m_readWriteLock.unlock();
-                        }
+//                    }else if(spreadDirection > 0){
+//                        Tile* swappableRightQuadrantTile(nullptr);
+//                        // If we can't go left anymore in our quadrant...
+//                        Worker* rightWorker = allWorkers.value(tilesToUpdateAgainst.m_quadrant + QPoint(0, 1), nullptr);
+//                        if(rightWorker != nullptr && rightWorker->m_tileSet.m_readWriteLock.tryLockForRead()){
+//                            TileSet& rightTileSet   = rightWorker->m_tileSet;
+//                            Tile& rightQuadrantTile = rightTileSet.TileAt(finalSpreadOffset, potentialPoint.y()); // tile left at current height in left quadrant
+//                            if(rightQuadrantTile.IsEmpty() || rightQuadrantTile.element->density < density){
+//                                swappableRightQuadrantTile = &rightQuadrantTile;
+//                            }
+//                            rightWorker->m_tileSet.m_readWriteLock.unlock();
+//                        }
 
-                        if(swappableRightQuadrantTile != nullptr){
-                            heading.setX(0);
-                            parentTile->SwapElements(*swappableRightQuadrantTile);
-                            return true;
-                        }
-                    }
-
-                }else{
-                    spreadPoint.setX(spreadPoint.x() + (spreadDirection * finalSpreadOffset));
-                    heading.setX(0);
-                }
-                break;
-            }else if(tilesToUpdateAgainst.IsEmpty(potentialPoint)){
-                spreadPoint = potentialPoint;
-                heading.setX(0);
-                break;
-            }
+//                        if(swappableRightQuadrantTile != nullptr){
+//                            heading.setX(0);
+//                            parentTile->SwapElements(*swappableRightQuadrantTile);
+//                            return true;
+//                        }
+//                    }
+//
+//                }else{
+//                    spreadPoint.setX(spreadPoint.x() + (spreadDirection * finalSpreadOffset));
+//                    heading.setX(0);
+//                }
+//                break;
+//            }else if(tilesToUpdateAgainst.IsEmpty(potentialPoint)){
+//                spreadPoint = potentialPoint;
+//                heading.setX(0);
+//                break;
+//            }
         }
 
         if(tilesToUpdateAgainst.IsEmpty(spreadPoint)){
