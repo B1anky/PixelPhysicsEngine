@@ -173,11 +173,11 @@ public:
     // NeighborSwap encapsulates all logic required to enqueue a Tile's
     // element to be swapped to another neighbor. The owning tile loses its
     // element temporarily and becomes EMPTY. This will only occur if NeighborSwap
-    // could even enqueue the element in the requested direction. If false,
+    // could enqueue the element in the requested direction. If false,
     // it's the equivalent of InBounds returning false for the request.
     // Do not use NeighborSwap to check if a neighbor exists. This function DOES
     // have side effects and must lock the request queue of the neighbor if in a
-    // valid direction. `this` is passed in just in case the
+    // valid direction. `this` is passed in to transfer ownership.
     bool NeighborSwap(Direction direction, const std::shared_ptr<Element>& element){
 
         bool swapped = false;
@@ -209,7 +209,7 @@ public:
                 break;
             case Direction::BOTTOM_LEFT:
                 neighbor           = bottomLeftNeighbor_;  // requesting bottom-left's top right coordinate.
-                neighborCoordinate = QPoint(workerImage_.width() / totalWorkerColumns_ - 1, 0);
+                neighborCoordinate = QPoint((workerImage_.width() / totalWorkerColumns_) - 1, 0);
                 break;
             case Direction::BOTTOM:
                 neighbor           = bottomNeighbor_;      // requesting bottom's top coordinate, maintaining current x.
@@ -226,13 +226,13 @@ public:
         if(neighbor != nullptr){
             if(neighborCoordinate.x() < 0){
                 neighborCoordinate.setX(0);
-            }else if(neighborCoordinate.x() > workerImage_.width()){
-                neighborCoordinate.setX(workerImage_.width() - 1);
+            }else if(neighborCoordinate.x() >= (workerImage_.width() / totalWorkerColumns_ )){
+                neighborCoordinate.setX( ( workerImage_.width() / totalWorkerColumns_ ) - 1);
             }
             if(neighborCoordinate.y() < 0){
                 neighborCoordinate.setY(0);
-            }else if(neighborCoordinate.y() > workerImage_.height()){
-                neighborCoordinate.setY(workerImage_.height());
+            }else if(neighborCoordinate.y() >= workerImage_.height() / totalWorkerRows_){
+                neighborCoordinate.setY( ( workerImage_.height() / totalWorkerRows_ ) - 1);
             }
             swapped = SendWorkerPacket(neighbor, neighborCoordinate, element);
         }

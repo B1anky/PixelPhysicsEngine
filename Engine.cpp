@@ -5,6 +5,7 @@
 #include "Hashhelpers.h"
 #include "TileSet.h"
 #include <QApplication>
+#include <QDebug>
 
 #include <QPoint>
 #include <random>
@@ -34,7 +35,7 @@ void Worker::UpdateTiles(){
         int localYOffset = 0;
 
         for (int j = 0; j < m_tileSet.height(); ++j) {
-            localYOffset = j + yOffset_;
+            localYOffset = j + yOffset_;// + (yOffset_ > 0 ? -1 : 0);
             QRgb* pixelRow = (QRgb*)(workerImage_.bits() + (localYOffset * workerImage_.bytesPerLine()));
             for (int i = 0; i < m_tileSet.width(); ++i) {
                 localXOffset = i + xOffset_;
@@ -53,6 +54,22 @@ void Worker::UpdateTiles(){
         }
     };
 
+    // Empty our queue for requests or send them back to the sender.
+    requestReadWriteLock_.lockForRead();
+    //qDebug() << m_id << "Queue size:" << requestQueue_.size();
+    while( !requestQueue_.empty() ) {
+        const WorkerPacket& topWorkerPacket = requestQueue_.front();
+        // Take ownership of the element
+        if( m_tileSet.IsEmpty(topWorkerPacket.destinationPosition_) ){
+            //qDebug() << topWorkerPacket.destinationPosition_;
+            m_tileSet.SetTile(Tile(topWorkerPacket.destinationPosition_, topWorkerPacket.element_));
+        }else{
+            NeighborSwap(NeighborDirection(topWorkerPacket.sourceWorker_), topWorkerPacket.element_);
+        }
+        requestQueue_.pop_front();
+    }
+    requestReadWriteLock_.unlock();
+
     // Try to service any resize requests from the main thread.
     if(needToResize){
         m_tileSet.ResizeTiles(m_resizeRequest.width(), m_resizeRequest.height());
@@ -70,20 +87,6 @@ void Worker::UpdateTiles(){
         m_tileSet.ClearTiles();
         needToClear = false;
     }
-
-    // Empty our queue for requests or send them back to the sender.
-    requestReadWriteLock_.lockForRead();
-    while( !requestQueue_.empty() ) {
-        const WorkerPacket& topWorkerPacket = requestQueue_.front();
-        // Take ownership of the element
-        if( m_tileSet.IsEmpty(topWorkerPacket.destinationPosition_) ){
-            m_tileSet.SetTile(Tile(topWorkerPacket.destinationPosition_, topWorkerPacket.element_));
-        }else{
-            NeighborSwap(NeighborDirection(topWorkerPacket.sourceWorker_), topWorkerPacket.element_);
-        }
-        requestQueue_.pop_front();
-    }
-    requestReadWriteLock_.unlock();
 
     QVector<int> localWidths(QVector<int>(m_tileSet.width()));
     std::iota(localWidths.begin(), localWidths.end(), 0);

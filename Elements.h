@@ -96,6 +96,8 @@ struct Element
         return !(*this == element);
     }
 
+    bool NeighborSwapped(Worker* bossWorker, const QPoint& spreadPoint, TileSet& tilesToUpdateAgainst, int yDirection);
+
     Element(Tile* parentTileIn, Mat::Material materialIn) :
         material(materialIn)
       , temperature(AMBIENT_TEMP)
