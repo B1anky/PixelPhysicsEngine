@@ -21,6 +21,10 @@ static QMutex timerMutex;
 #endif
 
 
+template <typename T> int sign(T val) {
+    return (T(0) < val) - (val < T(0));
+}
+
 void Worker::UpdateTiles(){
 
     auto UpdateImage = [this](){
@@ -35,7 +39,7 @@ void Worker::UpdateTiles(){
         int localYOffset = 0;
 
         for (int j = 0; j < m_tileSet.height(); ++j) {
-            localYOffset = j + yOffset_;// + (yOffset_ > 0 ? -1 : 0);
+            localYOffset = j + yOffset_ + (yOffset_ > 0 ? 0 : 0);
             QRgb* pixelRow = (QRgb*)(workerImage_.bits() + (localYOffset * workerImage_.bytesPerLine()));
             for (int i = 0; i < m_tileSet.width(); ++i) {
                 localXOffset = i + xOffset_;
@@ -54,21 +58,64 @@ void Worker::UpdateTiles(){
         }
     };
 
-    // Empty our queue for requests or send them back to the sender.
-    requestReadWriteLock_.lockForRead();
-    //qDebug() << m_id << "Queue size:" << requestQueue_.size();
-    while( !requestQueue_.empty() ) {
-        const WorkerPacket& topWorkerPacket = requestQueue_.front();
-        // Take ownership of the element
-        if( m_tileSet.IsEmpty(topWorkerPacket.destinationPosition_) ){
-            //qDebug() << topWorkerPacket.destinationPosition_;
-            m_tileSet.SetTile(Tile(topWorkerPacket.destinationPosition_, topWorkerPacket.element_));
-        }else{
-            NeighborSwap(NeighborDirection(topWorkerPacket.sourceWorker_), topWorkerPacket.element_);
+    auto ProcessRequestQueue = [this](){
+        // Empty our queue for requests or send them back to the sender.
+        for(int i = 0; i < requestQueue_.size(); ++i){
+            requestReadWriteLock_.lockForWrite();
+            WorkerPacket& topWorkerPacket = requestQueue_[i];
+            // Take ownership of the element
+            QPoint finalPosition(topWorkerPacket.destinationPosition_);
+            //do{
+            bool dealtWith(false);
+
+            // TODO: If this logix works, don't only do +1 heading checks, make sure to abide by the ambient density.
+            QPoint potentialPointOffset(finalPosition.x() + topWorkerPacket.element_->heading.x(), finalPosition.y() + 1);
+            if(m_tileSet.IsEmpty(finalPosition)){
+                m_tileSet.SetTile(Tile(finalPosition, topWorkerPacket.element_));
+                dealtWith = true;
+            }else{
+                if(potentialPointOffset.x() > (workerImage_.width() / totalWorkerColumns_) - 1){
+                    // Pass it to the right neighbor
+                    if(rightNeighbor_){
+                        dealtWith = NeighborSwap(Direction::RIGHT, topWorkerPacket.element_);
+                    }else{
+                        potentialPointOffset.setX((workerImage_.width() / totalWorkerColumns_) - 1);
+                    }
+                }else if(potentialPointOffset.x() < 0){
+                    // Pass it to the left neighbor
+                    if(leftNeighbor_){
+                        dealtWith = NeighborSwap(Direction::LEFT, topWorkerPacket.element_);
+                    }else{
+                        potentialPointOffset.setX(0);
+                    }
+                }
+            }
+
+            // Can we find the next empty spot down, without hitting something more dense?
+            if(!dealtWith){
+                while(m_tileSet.InBounds(potentialPointOffset) && m_tileSet.TileAt(potentialPointOffset).element->density < topWorkerPacket.element_->density){
+                    Tile& swapTile = m_tileSet.TileAt(potentialPointOffset);
+                    if(swapTile.IsEmpty()){
+                        m_tileSet.SetTile(Tile(potentialPointOffset, topWorkerPacket.element_));
+                        dealtWith = true;
+                        break;
+                    }
+                    potentialPointOffset.setY(potentialPointOffset.y() + 1);
+                }
+            }
+
+            if(dealtWith){
+                requestQueue_.removeAt(i);
+                --i;
+            }else{
+                if(NeighborSwap(NeighborDirection(topWorkerPacket.sourceWorker_), topWorkerPacket.element_)){
+                    requestQueue_.removeAt(i);
+                    --i;
+                }
+            }
+            requestReadWriteLock_.unlock();
         }
-        requestQueue_.pop_front();
-    }
-    requestReadWriteLock_.unlock();
+    };
 
     // Try to service any resize requests from the main thread.
     if(needToResize){
@@ -83,7 +130,10 @@ void Worker::UpdateTiles(){
         UpdateImage();
     }
 
+    ProcessRequestQueue();
+
     if(needToClear){
+        requestQueue_.clear();
         m_tileSet.ClearTiles();
         needToClear = false;
     }
@@ -102,6 +152,8 @@ void Worker::UpdateTiles(){
             }
         }
     }
+
+    ProcessRequestQueue();
 
     if(!needToResize){
         UpdateImage();

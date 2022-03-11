@@ -80,7 +80,6 @@ bool Element::NeighborSwapped(Worker* bossWorker, const QPoint& spreadPoint, Til
     }
 
     if( targetNeighbor != nullptr){
-
         if(bossWorker->NeighborSwap(bossWorker->NeighborDirection(targetNeighbor), this->parentTile->element)){
             active  = false;
             swapped = true;
@@ -187,7 +186,7 @@ bool PhysicalElement::SpreadUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWo
     }
 
     //If spread point is in bounds, we can just do it, if not we need to try swapping with the neighbor.
-    if(canSpreadLocally && tilesToUpdateAgainst.IsEmpty(spreadPoint)){
+    if(canSpreadLocally){
         heading = HeadingFromPointChange(originalPoint, spreadPoint);
         //DeltaVelocityDueToGravity(velocity, originalPoint, spreadPoint);
         tilesToUpdateAgainst.Swap(originalPoint, spreadPoint);
@@ -210,15 +209,15 @@ bool PhysicalElement::SpreadUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWo
         // If we couldn't swap bottom left or bottom right, try left or right
         // Note: Code seems dead, but not sure why. There definitely should be cases where
         //       the above NeighboreSwapped can fail.
-        //if(!spread){
-        //    spreadPoint = left ? QPoint(x - 1, y) : QPoint(x + 1, y);
-        //    if(NeighborSwapped(bossWorker, spreadPoint, tilesToUpdateAgainst, yDirection)){
-        //        heading = HeadingFromPointChange(originalPoint, spreadPoint);
-        //        //DeltaVelocityDueToGravity(velocity, originalPoint, spreadPoint);
-        //        active = false;
-        //        spread = true;
-        //    }
-        //}
+        if(!spread){
+            spreadPoint = left ? QPoint(x - 1, y) : QPoint(x + 1, y);
+            if(NeighborSwapped(bossWorker, spreadPoint, tilesToUpdateAgainst, yDirection)){
+                heading = HeadingFromPointChange(originalPoint, spreadPoint);
+                //DeltaVelocityDueToGravity(velocity, originalPoint, spreadPoint);
+                active = false;
+                spread = true;
+            }
+        }
     }
 
     return spread;
@@ -286,25 +285,23 @@ bool Liquid::SpreadUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWorker){
 
     if(active && !gravityUpdated && !didSpread){
 
-        if(heading.x() == 0){
-            int spread = bossWorker->workerImage_.width() / bossWorker->totalWorkerColumns_;
-            bool left = HorizontalDirectionFromHeading(heading);
-            // Should compound the liquid's heading in its already moving direction
+        //if(heading.x() == 0){
+            int spread = bossWorker->workerImage_.width();
+            bool left  = HorizontalDirectionFromHeading(heading);
             heading.setX(left ? spread : -spread );
-        }
+        //}
 
         QPoint spreadPoint(parentTile->position.x(), parentTile->position.y());
 
         // We hit a non empty tile, stop moving
         // We have to loop over every point in betweem current location and target to see if something will stop us early.
-        // TODO: Do this logic in its own thread since it's very expensive.
         int spreadDirection = sign(heading.x());
         QPoint potentialPoint(0, 0);
         for(int finalSpreadOffset = 0; finalSpreadOffset < abs(heading.x()); ++finalSpreadOffset){
             potentialPoint.setX(spreadPoint.x() + (spreadDirection * finalSpreadOffset));
             potentialPoint.setY(spreadPoint.y());
             bool outOfBounds = !tilesToUpdateAgainst.InBounds(potentialPoint);
-            if ( (outOfBounds /*|| tilesToUpdateAgainst.TileAt(potentialPoint).element->density > density */ ) ){
+            if ( outOfBounds || ( tilesToUpdateAgainst.TileAt(potentialPoint).element->density > density ) ){
 
                 // If specifically we're not in bounds towards the potential point, we should check to see if there's a quadrant to our left.
                 if(outOfBounds){
@@ -313,10 +310,11 @@ bool Liquid::SpreadUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWorker){
                     if(density != AMBIENT_DENSITY){
                         yDirection = density > AMBIENT_DENSITY ? 1 : -1;
                     }
-                    // TODO: Determine why this is draining the water so quickly.
+
                     if(NeighborSwapped(bossWorker, potentialPoint, tilesToUpdateAgainst, yDirection)){
-                        heading.setX(0);
+                        //heading.setX(0);
                         active = false;
+                        break;
                     }
 
                 }else{
@@ -336,6 +334,7 @@ bool Liquid::SpreadUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWorker){
             didSpread = true;
         }
     }
+
     return didSpread;
 
 }

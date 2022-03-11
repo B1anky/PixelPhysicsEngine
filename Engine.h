@@ -113,59 +113,60 @@ public:
     void FindNeighbors(){
         QPoint workerIndex(assignedWorkerColumn_, assignedWorkerRow_);
 
-        topLeftNeighbor_     = workerThreads_.value(workerIndex + QPoint(-1, -1), nullptr);
+        //topLeftNeighbor_     = workerThreads_.value(workerIndex + QPoint(-1, -1), nullptr);
         topNeighbor_         = workerThreads_.value(workerIndex + QPoint( 0, -1), nullptr);
-        topRightNeighbor_    = workerThreads_.value(workerIndex + QPoint( 1, -1), nullptr);
+        //topRightNeighbor_    = workerThreads_.value(workerIndex + QPoint( 1, -1), nullptr);
         leftNeighbor_        = workerThreads_.value(workerIndex + QPoint(-1,  0), nullptr);
         rightNeighbor_       = workerThreads_.value(workerIndex + QPoint( 1,  0), nullptr);
-        bottomLeftNeighbor_  = workerThreads_.value(workerIndex + QPoint(-1,  1), nullptr);
+        //bottomLeftNeighbor_  = workerThreads_.value(workerIndex + QPoint(-1,  1), nullptr);
         bottomNeighbor_      = workerThreads_.value(workerIndex + QPoint( 0,  1), nullptr);
-        bottomRightNeighbor_ = workerThreads_.value(workerIndex + QPoint( 1,  1), nullptr);
+        //bottomRightNeighbor_ = workerThreads_.value(workerIndex + QPoint( 1,  1), nullptr);
     }
 
     // Quick litmus test to determine if there exists a neighbor in a paricular direction.
     // This has no side-effects.
     bool HasNeighbor(Direction direction) const{
         switch(direction){
-            case Direction::TOP_LEFT:
-                return topLeftNeighbor_     != nullptr;
+            //case Direction::TOP_LEFT:
+            //    return topLeftNeighbor_     != nullptr;
             case Direction::TOP:
                 return topNeighbor_         != nullptr;
-            case Direction::TOP_RIGHT:
-                return topRightNeighbor_    != nullptr;
+            //case Direction::TOP_RIGHT:
+            //    return topRightNeighbor_    != nullptr;
             case Direction::LEFT:
                 return leftNeighbor_        != nullptr;
             case Direction::RIGHT:
                 return rightNeighbor_       != nullptr;
-            case Direction::BOTTOM_LEFT:
-                return bottomLeftNeighbor_  != nullptr;
+            //case Direction::BOTTOM_LEFT:
+            //    return bottomLeftNeighbor_  != nullptr;
             case Direction::BOTTOM:
                 return bottomNeighbor_      != nullptr;
-            case Direction::BOTTOM_RIGHT:
-                return bottomRightNeighbor_ != nullptr;
+            //case Direction::BOTTOM_RIGHT:
+            //    return bottomRightNeighbor_ != nullptr;
             default:
                 return false;
         }
     }
 
     Direction NeighborDirection(Worker* neighbor) const{
-        if(neighbor == topLeftNeighbor_){
-            return Direction::TOP_LEFT;
-        }else if(neighbor == topNeighbor_){
+        //if(neighbor == topLeftNeighbor_){
+        //    return Direction::TOP_LEFT;
+        //}
+        if(neighbor == topNeighbor_){
             return Direction::TOP;
-        }else if(neighbor == topRightNeighbor_){
-            return Direction::TOP_RIGHT;
+        //}else if(neighbor == topRightNeighbor_){
+        //    return Direction::TOP_RIGHT;
         }else if(neighbor == leftNeighbor_){
             return Direction::LEFT;
         }else if(neighbor == rightNeighbor_){
             return Direction::RIGHT;
-        }else if(neighbor == bottomLeftNeighbor_){
-            return Direction::BOTTOM_LEFT;
+        //}else if(neighbor == bottomLeftNeighbor_){
+        //    return Direction::BOTTOM_LEFT;
         }else if(neighbor == bottomNeighbor_){
             return Direction::BOTTOM;
-        }else if(neighbor == bottomRightNeighbor_){
-            return Direction::BOTTOM_RIGHT;
-        }
+        }//else if(neighbor == bottomRightNeighbor_){
+         //   return Direction::BOTTOM_RIGHT;
+         //}
 
         return Direction::NONE;
     }
@@ -187,53 +188,53 @@ public:
         QPoint  neighborCoordinate(-1, -1);
         Worker* neighbor(nullptr);
         switch(direction){
-            case Direction::TOP_LEFT:
-                neighbor           = topLeftNeighbor_;     // requesting top-left's bottom right coordinate.
-                neighborCoordinate = QPoint(workerImage_.width() / totalWorkerColumns_ - 1, workerImage_.height() / totalWorkerRows_ - 1);
-                break;
+            //case Direction::TOP_LEFT:
+            //    neighbor           = topLeftNeighbor_;     // requesting top-left's bottom right coordinate.
+            //    neighborCoordinate = QPoint( (workerImage_.width() / totalWorkerColumns_) - 1, (workerImage_.height() / totalWorkerRows_) - 1);
+            //    break;
             case Direction::TOP:
                 neighbor           = topNeighbor_;         // requesting top's bottom coordinate, maintaining current x.
-                neighborCoordinate = QPoint(element->parentTile->position.x(), workerImage_.height() / totalWorkerRows_ - 1);
+                neighborCoordinate = QPoint(element->parentTile->position.x(), (workerImage_.height() / totalWorkerRows_) - 1);
                 break;
-            case Direction::TOP_RIGHT:
-                neighbor           = topRightNeighbor_;    // requesting top-right's bottom left coordinate.
-                neighborCoordinate = QPoint(0, workerImage_.height() / totalWorkerRows_ - 1);
-                break;
+            //case Direction::TOP_RIGHT:
+            //    neighbor           = topRightNeighbor_;    // requesting top-right's bottom left coordinate.
+            //    neighborCoordinate = QPoint(0, (workerImage_.height() / totalWorkerRows_) - 1);
+            //    break;
             case Direction::LEFT:
                 neighbor           = leftNeighbor_;        // requesting left's right coordinate, maintaining current y.
-                neighborCoordinate = QPoint(workerImage_.width() / totalWorkerColumns_ - 1, element->parentTile->position.y());
+                neighborCoordinate = QPoint((workerImage_.width() / totalWorkerColumns_) - 1, element->parentTile->position.y());
                 break;
             case Direction::RIGHT:
                 neighbor           = rightNeighbor_;       // requesting right's left coordinate, maintaining current y.
                 neighborCoordinate = QPoint(0, element->parentTile->position.y());
                 break;
-            case Direction::BOTTOM_LEFT:
-                neighbor           = bottomLeftNeighbor_;  // requesting bottom-left's top right coordinate.
-                neighborCoordinate = QPoint((workerImage_.width() / totalWorkerColumns_) - 1, 0);
-                break;
+            //case Direction::BOTTOM_LEFT:
+            //    neighbor           = bottomLeftNeighbor_;  // requesting bottom-left's top right coordinate.
+            //    neighborCoordinate = QPoint((workerImage_.width() / totalWorkerColumns_) - 1, 0);
+            //    break;
             case Direction::BOTTOM:
                 neighbor           = bottomNeighbor_;      // requesting bottom's top coordinate, maintaining current x.
                 neighborCoordinate = QPoint(element->parentTile->position.x(), 0);
                 break;
-            case Direction::BOTTOM_RIGHT:
-                neighbor           = bottomRightNeighbor_; // requesting bottom right's top left coordinate.
-                neighborCoordinate = QPoint(0, 0);
-                break;
+            //case Direction::BOTTOM_RIGHT:
+            //    neighbor           = bottomRightNeighbor_; // requesting bottom right's top left coordinate.
+            //    neighborCoordinate = QPoint(0, 0);
+            //    break;
             default:
                 return false;
         }
 
         if(neighbor != nullptr){
-            if(neighborCoordinate.x() < 0){
-                neighborCoordinate.setX(0);
-            }else if(neighborCoordinate.x() >= (workerImage_.width() / totalWorkerColumns_ )){
-                neighborCoordinate.setX( ( workerImage_.width() / totalWorkerColumns_ ) - 1);
-            }
-            if(neighborCoordinate.y() < 0){
-                neighborCoordinate.setY(0);
-            }else if(neighborCoordinate.y() >= workerImage_.height() / totalWorkerRows_){
-                neighborCoordinate.setY( ( workerImage_.height() / totalWorkerRows_ ) - 1);
-            }
+            //if(neighborCoordinate.x() < 0){
+            //    neighborCoordinate.setX(0);
+            //}else if(neighborCoordinate.x() >= (workerImage_.width() / totalWorkerColumns_ )){
+            //    neighborCoordinate.setX( ( workerImage_.width() / totalWorkerColumns_ ) - 1);
+            //}
+            //if(neighborCoordinate.y() < 0){
+            //    neighborCoordinate.setY(0);
+            //}else if(neighborCoordinate.y() >= workerImage_.height() / totalWorkerRows_){
+            //    neighborCoordinate.setY( ( workerImage_.height() / totalWorkerRows_ ) - 1);
+            //}
             swapped = SendWorkerPacket(neighbor, neighborCoordinate, element);
         }
 
@@ -245,10 +246,10 @@ public:
     // This should be managed primarily through NeighborSwap to ensure thread-safety.
     bool SendWorkerPacket(Worker* neighbor, const QPoint& neighborCoordinate, const std::shared_ptr<Element>& element){
         bool workerPacketEnqueued = false;
-        //if(neighbor->m_tileSet.m_readWriteLock.tryLockForRead(1)){
+        if(neighbor->m_tileSet.m_readWriteLock.tryLockForRead()){
             workerPacketEnqueued = neighbor->m_tileSet.IsEmpty(neighborCoordinate);
-            //neighbor->m_tileSet.m_readWriteLock.unlock();
-        //}
+            neighbor->m_tileSet.m_readWriteLock.unlock();
+        }
 
         // If the tile is empty in the neighbor, we can enqueue it to be processed.
         // If thread safety magically doesn't burn us, just enqueue it without locking.
@@ -257,9 +258,9 @@ public:
         if(workerPacketEnqueued){
             if(neighbor->requestReadWriteLock_.tryLockForWrite()){
                 neighbor->requestQueue_.push_back(WorkerPacket(this, neighborCoordinate, element));
+                neighbor->requestReadWriteLock_.unlock();
                 // Erase `this` from our parent tile somce the neighbor's queue will keep us alive.
                 element->parentTile->SetElement(Mat::Material::EMPTY);
-                neighbor->requestReadWriteLock_.unlock();
             }else{
                 workerPacketEnqueued = false;
             }
