@@ -51,7 +51,7 @@ bool Element::NeighborSwapped(Worker* bossWorker, const QPoint& spreadPoint, Til
     Worker* targetNeighbor(nullptr);
 
     // Y = [0, height) -> Left or Right neighbor, regardless of density.
-    if(spreadPoint.y() <= tilesToUpdateAgainst.height() && spreadPoint.y() >= 0){
+    if(spreadPoint.y() >= 0 && spreadPoint.y() < tilesToUpdateAgainst.height()){
         if(spreadPoint.x() < 0){
             targetNeighbor = bossWorker->leftNeighbor_;
         }else if(spreadPoint.x() >= tilesToUpdateAgainst.width()){
@@ -62,7 +62,7 @@ bool Element::NeighborSwapped(Worker* bossWorker, const QPoint& spreadPoint, Til
     else if(yDirection > 0){
         if(spreadPoint.x() < 0){
             targetNeighbor = bossWorker->bottomLeftNeighbor_;
-        }else if(spreadPoint.x() > tilesToUpdateAgainst.width()){
+        }else if(spreadPoint.x() >= tilesToUpdateAgainst.width()){
             targetNeighbor = bossWorker->bottomRightNeighbor_;
         }else{
             targetNeighbor = bossWorker->bottomNeighbor_;
@@ -72,14 +72,14 @@ bool Element::NeighborSwapped(Worker* bossWorker, const QPoint& spreadPoint, Til
     else if(yDirection < 0){
         if(spreadPoint.x() < 0){
             targetNeighbor = bossWorker->topLeftNeighbor_;
-        }else if(spreadPoint.x() > tilesToUpdateAgainst.width()){
+        }else if(spreadPoint.x() >= tilesToUpdateAgainst.width()){
             targetNeighbor = bossWorker->topRightNeighbor_;
         }else{
             targetNeighbor = bossWorker->topNeighbor_;
         }
     }
 
-    if( targetNeighbor != nullptr){
+    if(targetNeighbor != nullptr){
         if(bossWorker->NeighborSwap(bossWorker->NeighborDirection(targetNeighbor), this->parentTile->element)){
             active  = false;
             swapped = true;
@@ -208,7 +208,7 @@ bool PhysicalElement::SpreadUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWo
 
         // If we couldn't swap bottom left or bottom right, try left or right
         // Note: Code seems dead, but not sure why. There definitely should be cases where
-        //       the above NeighboreSwapped can fail.
+        //       the above NeighborSwapped can fail.
         if(!spread){
             spreadPoint = left ? QPoint(x - 1, y) : QPoint(x + 1, y);
             if(NeighborSwapped(bossWorker, spreadPoint, tilesToUpdateAgainst, yDirection)){
@@ -285,21 +285,19 @@ bool Liquid::SpreadUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWorker){
 
     if(active && !gravityUpdated && !didSpread){
 
-        //if(heading.x() == 0){
-            int spread = bossWorker->workerImage_.width();
-            bool left  = HorizontalDirectionFromHeading(heading);
-            heading.setX(left ? spread : -spread );
-        //}
+        int spread = bossWorker->workerImage_.width();
+        bool left  = HorizontalDirectionFromHeading(heading);
+        heading.setX(left ? spread : -spread);
 
         QPoint spreadPoint(parentTile->position.x(), parentTile->position.y());
 
         // We hit a non empty tile, stop moving
         // We have to loop over every point in betweem current location and target to see if something will stop us early.
         int spreadDirection = sign(heading.x());
-        QPoint potentialPoint(0, 0);
+        QPoint potentialPoint(0, spreadPoint.y());
         for(int finalSpreadOffset = 0; finalSpreadOffset < abs(heading.x()); ++finalSpreadOffset){
             potentialPoint.setX(spreadPoint.x() + (spreadDirection * finalSpreadOffset));
-            potentialPoint.setY(spreadPoint.y());
+
             bool outOfBounds = !tilesToUpdateAgainst.InBounds(potentialPoint);
             if ( outOfBounds || ( tilesToUpdateAgainst.TileAt(potentialPoint).element->density > density ) ){
 
@@ -312,13 +310,16 @@ bool Liquid::SpreadUpdate(TileSet& tilesToUpdateAgainst, Worker* bossWorker){
                     }
 
                     if(NeighborSwapped(bossWorker, potentialPoint, tilesToUpdateAgainst, yDirection)){
-                        //heading.setX(0);
                         active = false;
-                        break;
+                    }
+                    else{
+                        spreadPoint.setX(spreadPoint.x() + (spreadDirection * (finalSpreadOffset - sign(heading.x()))));
+                        //spreadPoint.setX(sign(heading.x()));
+                        heading.setX(0);
                     }
 
                 }else{
-                    spreadPoint.setX(spreadPoint.x() + (spreadDirection * finalSpreadOffset));
+                    spreadPoint.setX(spreadPoint.x() + (spreadDirection * (finalSpreadOffset - sign(heading.x()))));
                     heading.setX(0);
                 }
                 break;

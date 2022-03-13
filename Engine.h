@@ -100,8 +100,8 @@ public:
         , safeToTerminate(false)
         , workerThreads_(workerThreads)
     {
-        xOffset_ = assignedWorkerColumn_ * (workerImage.width()  / totalWorkerColumns_);
-        yOffset_ = assignedWorkerRow_    * (workerImage.height() / totalWorkerRows_);
+        xOffset_ = (assignedWorkerColumn_ * (workerImage.width()  / static_cast<double>(totalWorkerColumns_))) + 1;
+        yOffset_ = (assignedWorkerRow_    * (workerImage.height() / static_cast<double>(totalWorkerRows_   ))) + 1;
     }
 
     ~Worker(){
@@ -113,14 +113,14 @@ public:
     void FindNeighbors(){
         QPoint workerIndex(assignedWorkerColumn_, assignedWorkerRow_);
 
-        //topLeftNeighbor_     = workerThreads_.value(workerIndex + QPoint(-1, -1), nullptr);
+        topLeftNeighbor_     = workerThreads_.value(workerIndex + QPoint(-1, -1), nullptr);
         topNeighbor_         = workerThreads_.value(workerIndex + QPoint( 0, -1), nullptr);
-        //topRightNeighbor_    = workerThreads_.value(workerIndex + QPoint( 1, -1), nullptr);
+        topRightNeighbor_    = workerThreads_.value(workerIndex + QPoint( 1, -1), nullptr);
         leftNeighbor_        = workerThreads_.value(workerIndex + QPoint(-1,  0), nullptr);
         rightNeighbor_       = workerThreads_.value(workerIndex + QPoint( 1,  0), nullptr);
-        //bottomLeftNeighbor_  = workerThreads_.value(workerIndex + QPoint(-1,  1), nullptr);
+        bottomLeftNeighbor_  = workerThreads_.value(workerIndex + QPoint(-1,  1), nullptr);
         bottomNeighbor_      = workerThreads_.value(workerIndex + QPoint( 0,  1), nullptr);
-        //bottomRightNeighbor_ = workerThreads_.value(workerIndex + QPoint( 1,  1), nullptr);
+        bottomRightNeighbor_ = workerThreads_.value(workerIndex + QPoint( 1,  1), nullptr);
     }
 
     // Quick litmus test to determine if there exists a neighbor in a paricular direction.
@@ -257,10 +257,11 @@ public:
         // queue if aforementioned race conditions present themselves as random crashes.
         if(workerPacketEnqueued){
             if(neighbor->requestReadWriteLock_.tryLockForWrite()){
+                Tile* parentTile = element->parentTile;
                 neighbor->requestQueue_.push_back(WorkerPacket(this, neighborCoordinate, element));
+                // Erase `this` from our parent tile since the neighbor's queue will keep us alive.
                 neighbor->requestReadWriteLock_.unlock();
-                // Erase `this` from our parent tile somce the neighbor's queue will keep us alive.
-                element->parentTile->SetElement(Mat::Material::EMPTY);
+                parentTile->SetElement(Mat::Material::EMPTY);
             }else{
                 workerPacketEnqueued = false;
             }
@@ -291,12 +292,12 @@ signals:
     void started();
 
 public:
-    QTimer*   updateTimer;
+    QTimer*           updateTimer;
     std::atomic<bool> needToResize;
-    bool      needToClear;
-    QSize     m_resizeRequest;
-    QReadWriteLock heightWidthMutex_;
-    QImage&        workerImage_;
+    bool              needToClear;
+    QSize             m_resizeRequest;
+    QReadWriteLock    heightWidthMutex_;
+    QImage&           workerImage_;
 
 //protected:
     // Used to determine the width and height implicitly

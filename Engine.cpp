@@ -39,10 +39,10 @@ void Worker::UpdateTiles(){
         int localYOffset = 0;
 
         for (int j = 0; j < m_tileSet.height(); ++j) {
-            localYOffset = j + yOffset_ + (yOffset_ > 0 ? 0 : 0);
+            localYOffset = j + yOffset_ - 1;
             QRgb* pixelRow = (QRgb*)(workerImage_.bits() + (localYOffset * workerImage_.bytesPerLine()));
             for (int i = 0; i < m_tileSet.width(); ++i) {
-                localXOffset = i + xOffset_;
+                localXOffset = i + xOffset_ - 1;
                 pixelRow[localXOffset] = Mat::MaterialToColorMap[m_tileSet.TileAt(i, j).element->material].rgba();
             }
         }
@@ -62,56 +62,56 @@ void Worker::UpdateTiles(){
         // Empty our queue for requests or send them back to the sender.
         for(int i = 0; i < requestQueue_.size(); ++i){
             requestReadWriteLock_.lockForWrite();
-            WorkerPacket& topWorkerPacket = requestQueue_[i];
+            WorkerPacket& currentWorkerPacket = requestQueue_[i];
             // Take ownership of the element
-            QPoint finalPosition(topWorkerPacket.destinationPosition_);
-            //do{
+            QPoint defaultDestinationPosition(currentWorkerPacket.destinationPosition_);
             bool dealtWith(false);
 
-            // TODO: If this logix works, don't only do +1 heading checks, make sure to abide by the ambient density.
-            QPoint potentialPointOffset(finalPosition.x() + topWorkerPacket.element_->heading.x(), finalPosition.y() + 1);
-            if(m_tileSet.IsEmpty(finalPosition)){
-                m_tileSet.SetTile(Tile(finalPosition, topWorkerPacket.element_));
+            QPoint potentialPointOffset(defaultDestinationPosition.x() + currentWorkerPacket.element_->heading.x(), defaultDestinationPosition.y());
+            // If the heading value is greater than 1, it's probably due to liquid. We don't want to push liquid into the middle of another neighbor...
+            if(m_tileSet.IsEmpty(defaultDestinationPosition)/* && abs(currentWorkerPacket.element_->heading.x()) <= 1*/){
+                m_tileSet.SetTile(Tile(defaultDestinationPosition, currentWorkerPacket.element_));
+                m_tileSet.TileAt(defaultDestinationPosition).Update(m_tileSet, this);
                 dealtWith = true;
-            }else{
-                if(potentialPointOffset.x() > (workerImage_.width() / totalWorkerColumns_) - 1){
-                    // Pass it to the right neighbor
-                    if(rightNeighbor_){
-                        dealtWith = NeighborSwap(Direction::RIGHT, topWorkerPacket.element_);
-                    }else{
-                        potentialPointOffset.setX((workerImage_.width() / totalWorkerColumns_) - 1);
-                    }
-                }else if(potentialPointOffset.x() < 0){
-                    // Pass it to the left neighbor
-                    if(leftNeighbor_){
-                        dealtWith = NeighborSwap(Direction::LEFT, topWorkerPacket.element_);
-                    }else{
-                        potentialPointOffset.setX(0);
-                    }
-                }
+            }else if(potentialPointOffset.x() > 0){
+                // Pass it to the right neighbor
+                dealtWith = NeighborSwap(Direction::RIGHT, currentWorkerPacket.element_);
+            }else if(potentialPointOffset.x() < 0){
+                // Pass it to the left neighbor
+                dealtWith = NeighborSwap(Direction::LEFT, currentWorkerPacket.element_);
             }
 
             // Can we find the next empty spot down, without hitting something more dense?
-            if(!dealtWith){
-                while(m_tileSet.InBounds(potentialPointOffset) && m_tileSet.TileAt(potentialPointOffset).element->density < topWorkerPacket.element_->density){
-                    Tile& swapTile = m_tileSet.TileAt(potentialPointOffset);
-                    if(swapTile.IsEmpty()){
-                        m_tileSet.SetTile(Tile(potentialPointOffset, topWorkerPacket.element_));
-                        dealtWith = true;
-                        break;
-                    }
-                    potentialPointOffset.setY(potentialPointOffset.y() + 1);
-                }
-            }
-
+            //if(!dealtWith){
+            //    bool someValidPointFound = m_tileSet.IsEmpty(defaultDestinationPosition);
+            //    // Liquid / gas Physics helping
+            //    if(someValidPointFound && abs(currentWorkerPacket.element_->heading.x()) > 1 ){
+            //        while(m_tileSet.TileAt(potentialPointOffset).element->density < currentWorkerPacket.element_->density){
+            //            potentialPointOffset.setY(potentialPointOffset.y() + 1);
+            //            if(!m_tileSet.IsEmpty(potentialPointOffset) || (abs(currentWorkerPacket.element_->heading.x()) > 1 )){
+            //                potentialPointOffset.setY(potentialPointOffset.y() - 1);
+            //                break;
+            //            }
+            //        }
+            //    }
+            //
+            //    if(someValidPointFound){
+            //        //m_tileSet.m_readWriteLock.lockForWrite();
+            //        m_tileSet.SetTile(Tile(potentialPointOffset, currentWorkerPacket.element_));
+            //        m_tileSet.TileAt(potentialPointOffset).Update(m_tileSet, this);
+            //        //m_tileSet.m_readWriteLock.unlock();
+            //        dealtWith = true;
+            //    }
+            //}
+            //
             if(dealtWith){
                 requestQueue_.removeAt(i);
                 --i;
-            }else{
-                if(NeighborSwap(NeighborDirection(topWorkerPacket.sourceWorker_), topWorkerPacket.element_)){
-                    requestQueue_.removeAt(i);
-                    --i;
-                }
+            }
+            else if(NeighborSwap(NeighborDirection(currentWorkerPacket.sourceWorker_), currentWorkerPacket.element_)){
+                requestQueue_.removeAt(i);
+                --i;
+                dealtWith = true;
             }
             requestReadWriteLock_.unlock();
         }
@@ -120,8 +120,8 @@ void Worker::UpdateTiles(){
     // Try to service any resize requests from the main thread.
     if(needToResize){
         m_tileSet.ResizeTiles(m_resizeRequest.width(), m_resizeRequest.height());
-        xOffset_ = assignedWorkerColumn_ * m_resizeRequest.width();
-        yOffset_ = assignedWorkerRow_    * m_resizeRequest.height();
+        xOffset_ = ( assignedWorkerColumn_ * (workerImage_.width()  / totalWorkerColumns_)) + 1;
+        yOffset_ = ( assignedWorkerRow_    * (workerImage_.height() / totalWorkerRows_   )) + 1;
         m_resizeRequest.setWidth(0);
         m_resizeRequest.setHeight(0);
 
@@ -144,12 +144,12 @@ void Worker::UpdateTiles(){
 
     for (int i = 0; i < m_tileSet.width(); ++i) {
         for (int j = m_tileSet.height() - 1; j >= 0; --j) {
+            m_tileSet.m_readWriteLock.lockForWrite();
             Tile& tile = m_tileSet.TileAt(localWidths.at(i), j);
             if(!m_tileSet.IsEmpty(tile)){
-                m_tileSet.m_readWriteLock.lockForWrite();
                 tile.Update(m_tileSet, this);
-                m_tileSet.m_readWriteLock.unlock();
             }
+            m_tileSet.m_readWriteLock.unlock();
         }
     }
 
@@ -222,7 +222,7 @@ void Engine::SetEngineGraphicsItem(QGraphicsEngineItem* engineGraphicsItem){
     m_engineGraphicsItem = engineGraphicsItem;
     m_engineGraphicsItem->update();
 
-    SetupWorkerThreads(2, 4);
+    SetupWorkerThreads(1, 2);
 
     foreach(auto workerThread, m_workerThreads){
         QThread* thread = new QThread(this);
@@ -259,8 +259,8 @@ void Engine::UserPlacedTile(Tile tile){
     int x = tile.position.x();
     int y = tile.position.y();
 
-    int workerWidths  = m_width  / totalWorkerColumns;
-    int workerHeights = m_height / totalWorkerRows;
+    int workerWidths  = m_width  / static_cast<double>(totalWorkerColumns);
+    int workerHeights = m_height / static_cast<double>(totalWorkerRows);
 
     int workerRow = 0;
     while(workerRow < totalWorkerRows){
@@ -287,8 +287,8 @@ void Engine::UserPlacedTile(Tile tile){
     // Can be a nullptr if the user is like half off of the view or scene with a big radius
     if(worker != nullptr){
         worker->m_tileSet.m_readWriteLock.lockForWrite();
-        tile.position.setX(x - worker->xOffset_ - 1);
-        tile.position.setY(y - worker->yOffset_ - 1);
+        tile.position.setX(x - worker->xOffset_);
+        tile.position.setY(y - worker->yOffset_);
         worker->m_tileSet.SetTile(tile);
         worker->m_tileSet.m_readWriteLock.unlock();
     }
@@ -311,5 +311,4 @@ void Engine::ResizeTiles(int width, int height, bool initialization){
             workerThread->needToResize = true;
         }
     }
-
 }
